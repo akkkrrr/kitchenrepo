@@ -13,7 +13,6 @@
         import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // Firebase-asetukset valmiina
         const firebaseConfig = {
             apiKey: "AIzaSyAohcWNh4slofn16Z-WRwss7CqzVnoilp4",
             authDomain: "coach-ai-70259.firebaseapp.com",
@@ -31,9 +30,9 @@
 
             window.db = db;
             window.auth = auth;
-            console.log("Firebase alustettu onnistuneesti");
+            console.log("Firebase alustettu");
         } catch (error) {
-            console.error("Firebase virhe:", error);
+            document.getElementById('debug-log').innerText = "Firebase-virhe: " + error.message;
         }
     </script>
 
@@ -47,6 +46,9 @@
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen pb-24 text-slate-900">
+
+    <!-- Piilotettu virheloki debuggausta varten -->
+    <div id="debug-log" class="fixed bottom-0 left-0 right-0 bg-red-500 text-white text-[8px] p-1 z-50 opacity-50 pointer-events-none"></div>
 
     <header class="bg-emerald-600 text-white p-6 shadow-lg sticky top-0 z-30 rounded-b-[3rem]">
         <div class="flex justify-between items-center max-w-md mx-auto">
@@ -90,7 +92,7 @@
     <main class="max-w-md mx-auto p-4 space-y-6">
         <section id="section-input" class="space-y-6 animate-in">
             <div class="bg-white p-8 rounded-[2.5rem] border border-emerald-100 shadow-xl text-center space-y-4">
-                <h2 id="welcomeText" class="text-lg font-black text-emerald-900 italic uppercase">Ladataan koutsia...</h2>
+                <h2 id="welcomeText" class="text-lg font-black text-emerald-900 italic uppercase">Kirjaudutaan...</h2>
                 <div class="grid grid-cols-2 gap-3">
                     <button onclick="document.getElementById('imageInput').click()" 
                         class="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] text-slate-700 font-black flex flex-col items-center gap-2 active:scale-95 transition-all">
@@ -103,24 +105,25 @@
                         <span class="text-[8px] uppercase font-black text-emerald-600">Kuvaa</span>
                     </div>
                 </div>
-                <textarea id="userExplanation" placeholder="Miten päivä on mennyt?" 
+                <textarea id="userExplanation" placeholder="Mitä söit tai ostit?" 
                     class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none h-32 resize-none"></textarea>
                 <button id="analyzeBtn" onclick="runComprehensiveAnalysis()" class="w-full bg-emerald-600 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl hover:bg-emerald-700 transition-all">
-                    ANALYSOI PÄIVÄ 🚀
+                    ANALYSOI NYT 🚀
                 </button>
             </div>
             <div id="loading" class="hidden text-center py-12">
                 <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p class="text-emerald-800 font-black text-[10px] uppercase italic">Koutsi miettii...</p>
+                <p class="text-emerald-800 font-black text-[10px] uppercase italic text-center">Tekoäly analysoi...</p>
             </div>
         </section>
 
         <section id="section-analysis" class="hidden space-y-4 animate-in">
             <div id="analysisResult"></div>
+            <button onclick="switchTab('input')" class="w-full text-slate-400 font-black text-[10px] uppercase py-4">Takaisin</button>
         </section>
 
         <section id="section-history" class="hidden space-y-4 animate-in text-center">
-            <h2 class="font-black text-lg text-slate-800 italic uppercase">Matkasi</h2>
+            <h2 class="font-black text-lg text-slate-800 italic uppercase">Historia</h2>
             <div id="historyContainer" class="space-y-3"></div>
         </section>
     </main>
@@ -129,18 +132,22 @@
         import { doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // Gemini API Key on nyt tässä valmiina
         const apiKey = "AIzaSyCi-T_18P6872Yy49q9n_0T58v8D8H2U0M"; 
         let imageFiles = []; 
         let user = null;
         let appState = { history: [], profile: { name: "Käyttäjä", goal: "Tasapaino" } };
+
+        const log = (msg) => {
+            console.log(msg);
+            document.getElementById('debug-log').innerText = msg;
+        };
 
         const initAuth = async () => {
             if (!window.auth) return;
             try {
                 await signInAnonymously(window.auth);
             } catch (error) {
-                console.error("Kirjautumisvirhe:", error);
+                log("Kirjautumisvirhe: " + error.message + ". Tarkista että Firebase Console -> Auth -> Anonymous on päällä.");
             }
         };
 
@@ -148,6 +155,7 @@
             if (u) {
                 user = u;
                 document.getElementById('syncStatus').classList.replace('bg-red-400', 'bg-green-400');
+                log("Kirjautunut sisään: " + u.uid);
                 loadData();
             } else {
                 initAuth();
@@ -172,9 +180,11 @@
                 onSnapshot(q, (snapshot) => {
                     appState.history = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
                     if(!document.getElementById('section-history').classList.contains('hidden')) renderHistory();
+                }, (err) => {
+                    log("Historiavirhe: " + err.message);
                 });
             } catch (err) {
-                console.error("Datan latausvirhe:", err);
+                log("Latausvirhe: " + err.message);
                 updateUI();
             }
         }
@@ -191,7 +201,7 @@
                 updateUI();
                 toggleProfile();
             } catch (e) {
-                console.error("Profiilin tallennusvirhe:", e);
+                log("Tallennusvirhe: " + e.message);
             }
         };
 
@@ -200,7 +210,7 @@
             
             const loader = document.getElementById('loading');
             const userText = document.getElementById('userExplanation').value;
-            if(!userText && imageFiles.length === 0) return alert("Kerro jotain päivästäsi tai lisää kuva!");
+            if(!userText && imageFiles.length === 0) return alert("Lisää tekstiä tai kuva!");
 
             loader.classList.remove('hidden');
             document.getElementById('section-input').classList.add('opacity-50', 'pointer-events-none');
@@ -218,6 +228,8 @@
                     })
                 });
 
+                if (!response.ok) throw new Error("API-yhteys epäonnistui: " + response.status);
+
                 const data = await response.json();
                 const result = JSON.parse(data.candidates[0].content.parts[0].text);
                 
@@ -233,8 +245,8 @@
                 renderAnalysis(result);
                 switchTab('analysis');
             } catch (e) {
-                console.error("Analyysivirhe:", e);
-                alert("Hups! Tekoäly on hetkellisesti väsynyt. Kokeile uudelleen hetken kuluttua.");
+                log("Analyysivirhe: " + e.message);
+                alert("Virhe analyysissa. Tarkista verkkoyhteys.");
             } finally {
                 loader.classList.add('hidden');
                 document.getElementById('section-input').classList.remove('opacity-50', 'pointer-events-none');
@@ -266,7 +278,7 @@
             document.getElementById('analysisResult').innerHTML = `
                 <div class="analysis-card p-8 rounded-[2.5rem] text-white shadow-2xl animate-in">
                     <h3 class="font-black text-xl italic uppercase">Koutsin Palaute</h3>
-                    <p class="text-emerald-100 text-sm italic">"${res.coach_feedback || 'Mahtavaa työtä tänään!'}"</p>
+                    <p class="text-emerald-100 text-sm italic">"${res.coach_feedback || 'Mahtavaa työtä!'}"</p>
                 </div>
             `;
         }
@@ -274,7 +286,7 @@
         function renderHistory() {
             const container = document.getElementById('historyContainer');
             if (appState.history.length === 0) {
-                container.innerHTML = `<p class="text-slate-400 text-xs py-10 italic uppercase">Ei vielä merkintöjä historiassa</p>`;
+                container.innerHTML = `<p class="text-slate-400 text-xs py-10 italic uppercase">Ei historiatietoja</p>`;
                 return;
             }
             container.innerHTML = appState.history.map(h => `

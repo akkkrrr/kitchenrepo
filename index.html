@@ -7,39 +7,6 @@
     <meta name="theme-color" content="#10b981">
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, orderBy, limit, enableNetwork } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAohcWNh4slofn16Z-WRwss7CqzVnoilp4",
-            authDomain: "coach-ai-70259.firebaseapp.com",
-            projectId: "coach-ai-70259",
-            storageBucket: "coach-ai-70259.firebasestorage.app",
-            messagingSenderId: "974738252750",
-            appId: "1:974738252750:web:59ea5f05414aa58e50419f",
-            measurementId: "G-SR166RBL63"
-        };
-
-        try {
-            const app = initializeApp(firebaseConfig);
-            const db = getFirestore(app);
-            const auth = getAuth(app);
-
-            window.db = db;
-            window.auth = auth;
-            
-            // Yritetään herättää yhteys heti alussa
-            enableNetwork(db).catch(() => {});
-            
-            console.log("Firebase alustettu");
-        } catch (error) {
-            console.error("Firebase-alustusvirhe:", error);
-        }
-    </script>
-
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -58,18 +25,19 @@
             <h1 class="text-xl font-black italic tracking-tighter">COACH AI 🧠</h1>
             <div class="flex items-center gap-2">
                 <div id="syncStatus" class="w-2 h-2 rounded-full bg-red-400"></div>
-                <button onclick="toggleProfile()" class="bg-emerald-700 p-2 rounded-full border border-emerald-500/50 hover:bg-emerald-800 transition-all">
+                <button onclick="window.toggleProfile()" class="bg-emerald-700 p-2 rounded-full border border-emerald-500/50 hover:bg-emerald-800 transition-all">
                     <span class="text-lg">👤</span>
                 </button>
             </div>
         </div>
         <nav class="flex justify-around mt-6 text-[10px] uppercase tracking-[0.2em] font-black gap-4">
-            <button onclick="switchTab('input')" id="tab-input" class="pb-2 tab-active transition-all">Syötä</button>
-            <button onclick="switchTab('analysis')" id="tab-analysis" class="pb-2 opacity-60 transition-all">Analyysi</button>
-            <button onclick="switchTab('history')" id="tab-history" class="pb-2 opacity-60 transition-all">Historia</button>
+            <button onclick="window.switchTab('input')" id="tab-input" class="pb-2 tab-active transition-all">Syötä</button>
+            <button onclick="window.switchTab('analysis')" id="tab-analysis" class="pb-2 opacity-60 transition-all">Analyysi</button>
+            <button onclick="window.switchTab('history')" id="tab-history" class="pb-2 opacity-60 transition-all">Historia</button>
         </nav>
     </header>
 
+    <!-- Profile/Settings Modal -->
     <div id="profileModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-4 shadow-2xl animate-in glass-effect">
             <h2 class="font-black text-xl italic uppercase">Asetukset</h2>
@@ -92,8 +60,8 @@
                 <p class="text-[8px] text-slate-400">Hae avain: <a href="https://aistudio.google.com/" target="_blank" class="underline text-emerald-600">aistudio.google.com</a></p>
             </div>
             <div class="flex gap-2 pt-4">
-                <button id="saveBtn" onclick="saveProfile()" class="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-emerald-700 active:scale-95 transition-all">Tallenna</button>
-                <button onclick="toggleProfile()" class="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all">Sulje</button>
+                <button id="saveBtn" onclick="window.saveProfile()" class="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-emerald-700 active:scale-95 transition-all">Tallenna</button>
+                <button onclick="window.toggleProfile()" class="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all">Sulje</button>
             </div>
         </div>
     </div>
@@ -122,14 +90,14 @@
                     <div class="p-6 bg-emerald-50 border-2 border-emerald-100 rounded-[2rem] flex flex-col items-center justify-center">
                         <span class="text-2xl font-black text-emerald-700" id="imageCount">0</span>
                         <span class="text-[8px] uppercase font-black text-emerald-600 text-center leading-tight">Kuva<br>valittu</span>
-                        <button onclick="clearImage()" id="clearImgBtn" class="hidden mt-2 text-[8px] text-red-500 font-bold uppercase underline">Poista</button>
+                        <button onclick="window.clearImage()" id="clearImgBtn" class="hidden mt-2 text-[8px] text-red-500 font-bold uppercase underline">Poista</button>
                     </div>
                 </div>
 
                 <textarea id="userExplanation" placeholder="Kerro koutsille: mitä söit tai mitä ostit?" 
                     class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none h-32 resize-none"></textarea>
                 
-                <button id="analyzeBtn" onclick="runComprehensiveAnalysis()" class="w-full bg-emerald-600 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl hover:bg-emerald-700 active:scale-95 transition-all">
+                <button id="analyzeBtn" onclick="window.runComprehensiveAnalysis()" class="w-full bg-emerald-600 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl hover:bg-emerald-700 active:scale-95 transition-all">
                     ANALYSOI VALINNAT 🚀
                 </button>
             </div>
@@ -142,7 +110,7 @@
 
         <section id="section-analysis" class="hidden space-y-4 animate-in">
             <div id="analysisResult"></div>
-            <button onclick="switchTab('input')" class="w-full text-slate-400 font-black text-[10px] uppercase py-4 hover:text-emerald-600 transition-colors">
+            <button onclick="window.switchTab('input')" class="w-full text-slate-400 font-black text-[10px] uppercase py-4 hover:text-emerald-600 transition-colors">
                 ← Uusi analyysi
             </button>
         </section>
@@ -153,78 +121,101 @@
         </section>
     </main>
 
+    <!-- Firebase & App Logic -->
     <script type="module">
-        import { doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, limit, enableNetwork } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, limit, enableNetwork } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        let selectedImageBase64 = null; 
-        let user = null;
-        let appState = { 
-            history: [], 
-            profile: { 
-                name: "Käyttäjä", 
+        // Global configuration
+        const firebaseConfig = JSON.parse('{"apiKey":"AIzaSyAohcWNh4slofn16Z-WRwss7CqzVnoilp4","authDomain":"coach-ai-70259.firebaseapp.com","projectId":"coach-ai-70259","storageBucket":"coach-ai-70259.firebasestorage.app","messagingSenderId":"974738252750","appId":"1:974738252750:web:59ea5f05414aa58e50419f","measurementId":"G-SR166RBL63"}');
+
+        // App state
+        let db, auth, user;
+        let selectedImageBase64 = null;
+        let selectedMimeType = "image/jpeg";
+        let historyUnsubscribe = null;
+        
+        const appState = {
+            history: [],
+            profile: {
+                name: "Käyttäjä",
                 goal: "Tasapaino",
-                apiKey: localStorage.getItem('gemini_api_key') || "" 
-            } 
-        };
-
-        const initAuth = async () => {
-            if (!window.auth) return;
-            try {
-                await signInAnonymously(window.auth);
-            } catch (error) {
-                console.error("Auth error:", error);
+                apiKey: localStorage.getItem('gemini_api_key') || ""
             }
         };
 
-        onAuthStateChanged(window.auth, (u) => {
-            if (u) {
-                user = u;
-                document.getElementById('syncStatus').classList.replace('bg-red-400', 'bg-green-400');
-                loadData();
-            } else {
-                initAuth();
-            }
-        });
-
-        async function loadData() {
-            if(!user || !window.db) return;
-            const appId = "kitchen-ai-v1";
+        // Initialize Firebase
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
             
-            try {
-                // Herätetään verkko
-                await enableNetwork(window.db).catch(() => {});
-
-                // Profiilin haku serveriltä (estää offline-lukkiutumisen)
-                const profRef = doc(window.db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile');
-                try {
-                    const profSnap = await getDoc(profRef);
-                    if(profSnap.exists()) {
-                        appState.profile = { ...appState.profile, ...profSnap.data() };
-                    }
-                } catch (profErr) {
-                    console.warn("Profiilin haku epäonnistui, käytetään paikallista:", profErr);
-                }
-                
-                updateUI();
-
-                const histRef = collection(window.db, 'artifacts', appId, 'users', user.uid, 'history');
-                const q = query(histRef, orderBy("date", "desc"), limit(20));
-                
-                onSnapshot(q, (snapshot) => {
-                    appState.history = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
-                    if(!document.getElementById('section-history').classList.contains('hidden')) renderHistory();
-                }, (err) => {
-                    console.error("Historia-snapshot virhe:", err);
-                });
-            } catch (err) {
-                console.error("Datan latausvirhe yleinen:", err);
-                updateUI();
-            }
+            // Re-enable network to combat offline cache lock
+            enableNetwork(db).catch(() => {});
+        } catch (error) {
+            console.error("Firebase init failed:", error);
         }
 
+        // --- AUTH & DATA SYNC ---
+
+        if (!auth) {
+            console.error("Auth-palvelu ei ole käytettävissä (Firebase-virhe).");
+        } else {
+            onAuthStateChanged(auth, async (u) => {
+                if (u) {
+                    user = u;
+                    document.getElementById('syncStatus').classList.replace('bg-red-400', 'bg-green-400');
+                    await loadData();
+                } else {
+                    // Yritetään anonyymiä kirjautumista jos ei ole useria
+                    signInAnonymously(auth).catch(err => console.error("Anonyymi kirjautuminen epäonnistui:", err));
+                }
+            });
+        }
+
+        async function loadData() {
+            if (!user || !db) return;
+            const appId = "kitchen-ai-v1";
+            
+            // Load Profile with server-first fallback
+            const profRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile');
+            try {
+                const profSnap = await getDoc(profRef);
+                if (profSnap.exists()) {
+                    const serverData = profSnap.data();
+                    const storedKey = localStorage.getItem('gemini_api_key') || "";
+                    
+                    // Suojataan API-avain niin ettei se pyyhkiydy jos Firestore-dokumentissa sitä ei ole
+                    appState.profile = { 
+                        ...appState.profile, 
+                        ...serverData,
+                        apiKey: storedKey || serverData.apiKey || appState.profile.apiKey 
+                    };
+                }
+            } catch (e) {
+                console.warn("Profiilin haku epäonnistui, käytetään paikallisia asetuksia:", e);
+            }
+            updateUI();
+
+            // Load History with unsubscribe protection
+            if (historyUnsubscribe) historyUnsubscribe();
+            
+            const histRef = collection(db, 'artifacts', appId, 'users', user.uid, 'history');
+            const q = query(histRef, orderBy("date", "desc"), limit(20));
+            
+            historyUnsubscribe = onSnapshot(q, (snapshot) => {
+                appState.history = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                if (!document.getElementById('section-history').classList.contains('hidden')) renderHistory();
+            }, (err) => {
+                console.error("Historialistan synkronointivirhe:", err);
+            });
+        }
+
+        // --- CORE FUNCTIONS ---
+
         window.saveProfile = async () => {
-            if(!user || !window.db) return;
+            if (!user || !db) return;
             const key = document.getElementById('profApiKey').value.trim();
             const btn = document.getElementById('saveBtn');
             const feedback = document.getElementById('saveFeedback');
@@ -235,28 +226,24 @@
             appState.profile.name = document.getElementById('profName').value || "Käyttäjä";
             appState.profile.goal = document.getElementById('profGoal').value;
             appState.profile.apiKey = key;
-
             localStorage.setItem('gemini_api_key', key);
 
-            const appId = "kitchen-ai-v1";
             try {
-                await setDoc(doc(window.db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile'), {
+                await setDoc(doc(db, 'artifacts', 'kitchen-ai-v1', 'users', user.uid, 'settings', 'profile'), {
                     name: appState.profile.name,
                     goal: appState.profile.goal
                 });
                 
                 feedback.classList.remove('hidden');
                 updateUI();
-                
                 setTimeout(() => {
                     feedback.classList.add('hidden');
-                    toggleProfile();
-                    btn.disabled = false;
-                    btn.innerText = "Tallenna";
+                    window.toggleProfile();
                 }, 1000);
             } catch (e) {
                 console.error("Tallennusvirhe:", e);
-                alert("Virhe tallennuksessa: " + e.message);
+                alert("Virhe asetusten tallentamisessa: " + e.message);
+            } finally {
                 btn.disabled = false;
                 btn.innerText = "Tallenna";
             }
@@ -268,7 +255,7 @@
             for (let i = 0; i < retries; i++) {
                 try {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 35000); 
+                    const timeoutId = setTimeout(() => controller.abort(), 35000);
 
                     const response = await fetch(url, {
                         method: 'POST',
@@ -281,76 +268,89 @@
 
                     if (response.ok) return await response.json();
                     
-                    const errorData = await response.json();
-                    if (response.status === 401 || response.status === 403) throw new Error("API-avain ei kelpaa.");
+                    // Fail fast on auth errors
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error("API-avain ei kelpaa tai se on vanhentunut.");
+                    }
                     
+                    // Only retry on rate limits or server errors
+                    if (response.status !== 429 && response.status < 500) {
+                        const errBody = await response.json();
+                        throw new Error(errBody.error?.message || "Rajapintavirhe");
+                    }
+
                     await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
                 } catch (err) {
-                    if (i === retries - 1) throw err;
+                    if (i === retries - 1 || err.message.includes("API-avain")) throw err;
                 }
             }
         }
 
         window.runComprehensiveAnalysis = async () => {
             const currentApiKey = appState.profile.apiKey || localStorage.getItem('gemini_api_key');
-            
             if (!currentApiKey) {
-                toggleProfile();
-                return alert("Aseta Gemini API-avain asetuksista ensin!");
+                alert("API-avain puuttuu. Lisää se asetuksista.");
+                window.toggleProfile();
+                return;
             }
             
-            const loader = document.getElementById('loading');
             const userText = document.getElementById('userExplanation').value;
-            if(!userText && !selectedImageBase64) return alert("Kirjoita jotain tai valitse kuva!");
+            if (!userText && !selectedImageBase64) return alert("Kirjoita jotain tai valitse kuva!");
 
+            const loader = document.getElementById('loading');
             loader.classList.remove('hidden');
             document.getElementById('section-input').classList.add('opacity-50', 'pointer-events-none');
 
             try {
-                let parts = [{ text: `Toimi keittiövalmentajana. Käyttäjä: ${appState.profile.name}, Tavoite: ${appState.profile.goal}. Analysoi käyttäjän syömiset tai kuitit. Anna kannustava, napakka ja rehellinen palaute suomeksi. VASTAA PELKKÄNÄ JSONINA tässä muodossa: {"coach_feedback": "tekstisi tähän"}.` }];
+                let parts = [{ text: `Toimi keittiövalmentajana. Käyttäjä: ${appState.profile.name}, Tavoite: ${appState.profile.goal}. Analysoi käyttäjän syömiset tai kuitit. Anna kannustava, napakka ja rehellinen palaute suomeksi. VASTAA PELKKÄNÄ JSONINA tässä muodossa: {"coach_feedback": "tekstisi tähän"}. Jos et pysty tuottamaan JSONia, palauta {"error":"non_json"}.` }];
                 
                 if (userText) parts.push({ text: `Käyttäjän viesti: ${userText}` });
                 if (selectedImageBase64) {
                     parts.push({ 
                         inlineData: { 
-                            mimeType: "image/jpeg", 
+                            mimeType: selectedMimeType, 
                             data: selectedImageBase64.split(',')[1] 
                         } 
                     });
                 }
 
-                const payload = { contents: [{ parts: parts }] };
-                const data = await callGeminiWithRetry(payload, currentApiKey);
-
-                if (!data || !data.candidates) throw new Error("Tyhjä vastaus AI:lta.");
-
-                let rawText = data.candidates[0].content.parts[0].text;
-                let cleanJsonText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+                const data = await callGeminiWithRetry({ contents: [{ parts }] }, currentApiKey);
                 
-                const result = JSON.parse(cleanJsonText);
+                // Yhdistetään kaikki tekstipartit vikasietoisesti
+                const rawText = data?.candidates?.[0]?.content?.parts
+                    ?.map(p => p.text || "")
+                    .join("\n") || "";
                 
-                if (user && window.db) {
-                    const appId = "kitchen-ai-v1";
-                    addDoc(collection(window.db, 'artifacts', appId, 'users', user.uid, 'history'), {
+                // Robust JSON extraction using Regex
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) throw new Error("AI ei palauttanut validia JSON-muotoa.");
+                
+                const result = JSON.parse(jsonMatch[0]);
+                if (result.error) throw new Error("AI ei pystynyt analysoimaan kohdetta.");
+                
+                // Save to History
+                if (user && db) {
+                    addDoc(collection(db, 'artifacts', 'kitchen-ai-v1', 'users', user.uid, 'history'), {
                         date: new Date().toISOString(),
                         coach_feedback: result.coach_feedback,
-                        userNote: userText
-                    }).catch(() => {});
+                        userNote: userText || ""
+                    }).catch(err => console.error("Historian tallennus epäonnistui:", err));
                 }
                 
                 renderAnalysis(result);
-                switchTab('analysis');
-                
+                window.switchTab('analysis');
                 document.getElementById('userExplanation').value = "";
-                clearImage();
+                window.clearImage();
             } catch (e) {
-                console.error("Analysis Error:", e);
-                alert("Yhteysvirhe AI-palveluun tai API-avain virheellinen.");
+                console.error("Analyysi epäonnistui:", e);
+                alert(e.message || "Analyysi epäonnistui. Tarkista API-avain ja verkkoyhteys.");
             } finally {
                 loader.classList.add('hidden');
                 document.getElementById('section-input').classList.remove('opacity-50', 'pointer-events-none');
             }
         };
+
+        // --- UI HELPERS ---
 
         window.switchTab = (tab) => {
             document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
@@ -366,12 +366,14 @@
             if (!modal.classList.contains('hidden')) {
                 document.getElementById('profName').value = appState.profile.name;
                 document.getElementById('profGoal').value = appState.profile.goal;
+                // Haetaan avain dynaamisesti muistista tai tallennustilasta
                 document.getElementById('profApiKey').value = appState.profile.apiKey || localStorage.getItem('gemini_api_key') || "";
             }
         };
 
         window.clearImage = () => {
             selectedImageBase64 = null;
+            selectedMimeType = "image/jpeg"; // Palautetaan oletus
             document.getElementById('imageCount').innerText = "0";
             document.getElementById('imagePreviewContainer').classList.add('hidden');
             document.getElementById('imagePlaceholder').classList.remove('hidden');
@@ -410,16 +412,17 @@
             `).join('');
         }
 
+        // Image selection handler
         document.getElementById('imageInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            selectedMimeType = file.type || "image/jpeg";
 
             const reader = new FileReader();
             reader.onload = (ev) => {
                 selectedImageBase64 = ev.target.result;
                 document.getElementById('imageCount').innerText = "1";
-                const previewImg = document.getElementById('imagePreview');
-                previewImg.src = selectedImageBase64;
+                document.getElementById('imagePreview').src = selectedImageBase64;
                 document.getElementById('imagePreviewContainer').classList.remove('hidden');
                 document.getElementById('imagePlaceholder').classList.add('hidden');
                 document.getElementById('clearImgBtn').classList.remove('hidden');

@@ -10,7 +10,7 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, orderBy, limit, enableNetwork, disableNetwork } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, orderBy, limit, enableNetwork } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         const firebaseConfig = {
@@ -31,12 +31,12 @@
             window.db = db;
             window.auth = auth;
             
-            // Yritetään pakottaa verkko päälle, jos tuli offline-virhe
-            enableNetwork(db).catch(() => console.log("Verkko jo päällä"));
+            // Yritetään herättää yhteys heti alussa
+            enableNetwork(db).catch(() => {});
             
             console.log("Firebase alustettu");
         } catch (error) {
-            console.error("Firebase-virhe:", error);
+            console.error("Firebase-alustusvirhe:", error);
         }
     </script>
 
@@ -192,14 +192,20 @@
             const appId = "kitchen-ai-v1";
             
             try {
-                // Yritetään herättää tietokanta offline-tilasta
+                // Herätetään verkko
                 await enableNetwork(window.db).catch(() => {});
 
+                // Profiilin haku serveriltä (estää offline-lukkiutumisen)
                 const profRef = doc(window.db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile');
-                const profSnap = await getDoc(profRef);
-                if(profSnap.exists()) {
-                    appState.profile = { ...appState.profile, ...profSnap.data() };
+                try {
+                    const profSnap = await getDoc(profRef);
+                    if(profSnap.exists()) {
+                        appState.profile = { ...appState.profile, ...profSnap.data() };
+                    }
+                } catch (profErr) {
+                    console.warn("Profiilin haku epäonnistui, käytetään paikallista:", profErr);
                 }
+                
                 updateUI();
 
                 const histRef = collection(window.db, 'artifacts', appId, 'users', user.uid, 'history');
@@ -209,11 +215,10 @@
                     appState.history = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
                     if(!document.getElementById('section-history').classList.contains('hidden')) renderHistory();
                 }, (err) => {
-                    console.error("Snapshot error:", err);
-                    // Jos tulee offline-virhe, yritetään ladata historian hännille jotain jos mahdollista
+                    console.error("Historia-snapshot virhe:", err);
                 });
             } catch (err) {
-                console.error("Datan latausvirhe:", err);
+                console.error("Datan latausvirhe yleinen:", err);
                 updateUI();
             }
         }
@@ -263,7 +268,7 @@
             for (let i = 0; i < retries; i++) {
                 try {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+                    const timeoutId = setTimeout(() => controller.abort(), 35000); 
 
                     const response = await fetch(url, {
                         method: 'POST',
@@ -277,14 +282,10 @@
                     if (response.ok) return await response.json();
                     
                     const errorData = await response.json();
-                    console.warn(`Yritys ${i+1} epäonnistui:`, errorData);
-                    
                     if (response.status === 401 || response.status === 403) throw new Error("API-avain ei kelpaa.");
-                    if (response.status === 404) throw new Error("AI-mallia ei löydy.");
                     
                     await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
                 } catch (err) {
-                    if (err.name === 'AbortError') console.warn("Pyyntö aikakatkaistiin.");
                     if (i === retries - 1) throw err;
                 }
             }
@@ -328,14 +329,13 @@
                 
                 const result = JSON.parse(cleanJsonText);
                 
-                // Tallennus Firebaseen, jos yhteys on
                 if (user && window.db) {
                     const appId = "kitchen-ai-v1";
                     addDoc(collection(window.db, 'artifacts', appId, 'users', user.uid, 'history'), {
                         date: new Date().toISOString(),
                         coach_feedback: result.coach_feedback,
                         userNote: userText
-                    }).catch(err => console.error("Historian tallennus epäonnistui (offline?):", err));
+                    }).catch(() => {});
                 }
                 
                 renderAnalysis(result);
@@ -345,7 +345,7 @@
                 clearImage();
             } catch (e) {
                 console.error("Analysis Error:", e);
-                alert("Virhe: " + (e.message.includes("API-avain") ? "API-avain on väärin." : "Yhteysvirhe. Yritä uudelleen hetken päästä."));
+                alert("Yhteysvirhe AI-palveluun tai API-avain virheellinen.");
             } finally {
                 loader.classList.add('hidden');
                 document.getElementById('section-input').classList.remove('opacity-50', 'pointer-events-none');
@@ -418,7 +418,6 @@
             reader.onload = (ev) => {
                 selectedImageBase64 = ev.target.result;
                 document.getElementById('imageCount').innerText = "1";
-                
                 const previewImg = document.getElementById('imagePreview');
                 previewImg.src = selectedImageBase64;
                 document.getElementById('imagePreviewContainer').classList.remove('hidden');

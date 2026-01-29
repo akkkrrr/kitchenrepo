@@ -201,7 +201,7 @@
                 onSnapshot(q, (snapshot) => {
                     appState.history = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
                     if(!document.getElementById('section-history').classList.contains('hidden')) renderHistory();
-                });
+                }, (err) => console.error("Snapshot error:", err));
             } catch (err) {
                 console.error("Datan latausvirhe:", err);
                 updateUI();
@@ -217,11 +217,9 @@
             btn.disabled = true;
             btn.innerText = "Tallennetaan...";
 
-            appState.profile = {
-                name: document.getElementById('profName').value || "Käyttäjä",
-                goal: document.getElementById('profGoal').value,
-                apiKey: key
-            };
+            appState.profile.name = document.getElementById('profName').value || "Käyttäjä";
+            appState.profile.goal = document.getElementById('profGoal').value;
+            appState.profile.apiKey = key;
 
             localStorage.setItem('gemini_api_key', key);
 
@@ -247,6 +245,30 @@
                 btn.innerText = "Tallenna";
             }
         };
+
+        // Funktio kutsuu Gemini APIa uudelleenyrityslogiikalla
+        async function callGeminiWithRetry(payload, apiKey, retries = 5) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) return await response.json();
+                    
+                    if (response.status === 404) throw new Error("Mallia ei löydy. Tarkista API-versio.");
+                    
+                    // Odotetaan ennen uutta yritystä (1s, 2s, 4s...)
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                }
+            }
+        }
 
         window.runComprehensiveAnalysis = async () => {
             const currentApiKey = appState.profile.apiKey || localStorage.getItem('gemini_api_key');
@@ -276,21 +298,9 @@
                     });
                 }
 
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${currentApiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: parts }],
-                        generationConfig: { responseMimeType: "application/json" }
-                    })
-                });
+                const payload = { contents: [{ parts: parts }], generationConfig: { responseMimeType: "application/json" } };
+                const data = await callGeminiWithRetry(payload, currentApiKey);
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error?.message || "API-virhe");
-                }
-
-                const data = await response.json();
                 const result = JSON.parse(data.candidates[0].content.parts[0].text);
                 
                 if (user && window.db) {
@@ -308,7 +318,8 @@
                 document.getElementById('userExplanation').value = "";
                 clearImage();
             } catch (e) {
-                alert("Virhe analyysissa: " + e.message);
+                console.error(e);
+                alert("Virhe analyysissa: " + e.message + "\n\nVarmista, että API-avain on oikein ja malli on saatavilla.");
             } finally {
                 loader.classList.add('hidden');
                 document.getElementById('section-input').classList.remove('opacity-50', 'pointer-events-none');
@@ -382,7 +393,6 @@
                 selectedImageBase64 = ev.target.result;
                 document.getElementById('imageCount').innerText = "1";
                 
-                // Päivitä esikatselu
                 const previewImg = document.getElementById('imagePreview');
                 previewImg.src = selectedImageBase64;
                 document.getElementById('imagePreviewContainer').classList.remove('hidden');

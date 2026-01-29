@@ -69,7 +69,7 @@
 
     <div id="profileModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-4 shadow-2xl animate-in">
-            <h2 class="font-black text-xl italic uppercase">Profiili</h2>
+            <h2 class="font-black text-xl italic uppercase">Asetukset</h2>
             <div class="space-y-2">
                 <label class="text-[10px] font-black uppercase text-slate-400">Nimi</label>
                 <input type="text" id="profName" class="w-full bg-slate-50 p-3 rounded-xl border-0 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500">
@@ -81,6 +81,11 @@
                     <option value="Terveellisyys">Terveellisyys 🥗</option>
                     <option value="Tasapaino">Molemmat ⚖️</option>
                 </select>
+            </div>
+            <div class="space-y-2">
+                <label class="text-[10px] font-black uppercase text-slate-400">Gemini API-avain</label>
+                <input type="password" id="profApiKey" placeholder="AIzaSy..." class="w-full bg-slate-50 p-3 rounded-xl border-0 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                <p class="text-[8px] text-slate-400">Hae avain: aistudio.google.com</p>
             </div>
             <div class="flex gap-2 pt-4">
                 <button onclick="saveProfile()" class="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Tallenna</button>
@@ -132,12 +137,16 @@
         import { doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // UUSI API-AVAIN (Päivitetty 30.1.2026)
-        const apiKey = "AIzaSyD-7V_Y0-q1_2_3_example_key_please_check"; 
-        
         let imageFiles = []; 
         let user = null;
-        let appState = { history: [], profile: { name: "Käyttäjä", goal: "Tasapaino" } };
+        let appState = { 
+            history: [], 
+            profile: { 
+                name: "Käyttäjä", 
+                goal: "Tasapaino",
+                apiKey: localStorage.getItem('gemini_api_key') || "" 
+            } 
+        };
 
         const log = (msg) => {
             console.log(msg);
@@ -172,7 +181,8 @@
                 const profRef = doc(window.db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile');
                 const profSnap = await getDoc(profRef);
                 if(profSnap.exists()) {
-                    appState.profile = profSnap.data();
+                    const data = profSnap.data();
+                    appState.profile = { ...appState.profile, ...data };
                 }
                 updateUI();
 
@@ -193,13 +203,24 @@
 
         window.saveProfile = async () => {
             if(!user || !window.db) return;
+            const key = document.getElementById('profApiKey').value.trim();
+            
             appState.profile = {
                 name: document.getElementById('profName').value || "Käyttäjä",
-                goal: document.getElementById('profGoal').value
+                goal: document.getElementById('profGoal').value,
+                apiKey: key
             };
+
+            // Tallennetaan avain paikallisesti selaimeen turvallisuuden vuoksi
+            localStorage.setItem('gemini_api_key', key);
+
             const appId = "kitchen-ai-v1";
             try {
-                await setDoc(doc(window.db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile'), appState.profile);
+                // Tallennetaan muut tiedot paitsi API-avain tietokantaan (tai avain jos haluat, mutta paikallinen on usein helpompi)
+                await setDoc(doc(window.db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile'), {
+                    name: appState.profile.name,
+                    goal: appState.profile.goal
+                });
                 updateUI();
                 toggleProfile();
             } catch (e) {
@@ -208,7 +229,12 @@
         };
 
         window.runComprehensiveAnalysis = async () => {
-            if (!apiKey || apiKey.includes("example_key")) return alert("API-avain täytyy päivittää koodiin!");
+            const currentApiKey = appState.profile.apiKey || localStorage.getItem('gemini_api_key');
+            
+            if (!currentApiKey) {
+                toggleProfile();
+                return alert("Syötä ensin Gemini API-avain asetuksiin! (Hae se: aistudio.google.com)");
+            }
             
             const loader = document.getElementById('loading');
             const userText = document.getElementById('userExplanation').value;
@@ -221,7 +247,7 @@
                 const imageParts = imageFiles.map(b64 => ({ inlineData: { mimeType: "image/jpeg", data: b64.split(',')[1] } }));
                 const prompt = `Toimi keittiövalmentajana. Käyttäjä: ${appState.profile.name}, Tavoite: ${appState.profile.goal}. Analysoi käyttäjän syömiset tai kuitit. Anna kannustava ja lyhyt palaute suomeksi JSON-muodossa: {"coach_feedback": "..."}`;
 
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -252,7 +278,12 @@
                 switchTab('analysis');
             } catch (e) {
                 log("Analyysivirhe: " + e.message);
-                alert("Virhe: " + (e.message.includes("API key") ? "API-avain on virheellinen." : "Tekoäly-yhteys katkesi."));
+                if(e.message.includes("API key")) {
+                    alert("API-avain on virheellinen tai vanhentunut. Tarkista se profiiliasetuksista.");
+                    toggleProfile();
+                } else {
+                    alert("Tekoäly-yhteys katkesi: " + e.message);
+                }
             } finally {
                 loader.classList.add('hidden');
                 document.getElementById('section-input').classList.remove('opacity-50', 'pointer-events-none');
@@ -273,6 +304,7 @@
             if (!modal.classList.contains('hidden')) {
                 document.getElementById('profName').value = appState.profile.name;
                 document.getElementById('profGoal').value = appState.profile.goal;
+                document.getElementById('profApiKey').value = appState.profile.apiKey || localStorage.getItem('gemini_api_key') || "";
             }
         };
 

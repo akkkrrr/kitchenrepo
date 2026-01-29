@@ -55,7 +55,7 @@ export default function App() {
     const q = query(
       collection(db, 'artifacts', appId, 'users', user.uid, 'history'),
       orderBy('date', 'desc'),
-      limit(5) // Viimeisimmät tapahtumat kontekstia varten
+      limit(5)
     );
     const unsubHistory = onSnapshot(
       q,
@@ -149,7 +149,6 @@ export default function App() {
       setProposal(result);
       setActiveTab('analysis');
 
-      // Save as history event (Layer 3 interpretation)
       await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'history'), {
         ...result,
         date: new Date().toISOString()
@@ -233,6 +232,7 @@ export default function App() {
                 <label className="flex-1 cursor-pointer">
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                     const file = e.target.files[0];
+                    if (!file) return;
                     const reader = new FileReader();
                     reader.onloadend = () => setImage(reader.result);
                     reader.readAsDataURL(file);
@@ -287,7 +287,7 @@ export default function App() {
               </div>
             </div>
 
-            {proposal.items_detected.length > 0 && (
+            {proposal.items_detected?.length > 0 && (
               <div className="bg-white p-6 rounded-[2rem] border border-slate-200 space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-[10px] font-black uppercase text-slate-400">Ehdotetut muutokset</h3>
@@ -344,7 +344,7 @@ export default function App() {
                   {item.type === 'shopping' ? <ShoppingCart size={18} /> : <Utensils size={18} />}
                 </div>
                 <div className="flex-1">
-                  <div className="text-[8px] font-bold text-slate-400 uppercase">{new Date(item.date).toLocaleDateString('fi-FI')}</div>
+                  <div className="text-[8px] font-bold text-slate-400 uppercase">{item.date ? new Date(item.date).toLocaleDateString('fi-FI') : '...'}</div>
                   <p className="text-xs font-bold text-slate-700 line-clamp-2">"{item.coach_feedback}"</p>
                 </div>
               </div>

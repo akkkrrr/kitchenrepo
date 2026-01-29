@@ -10,7 +10,7 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, orderBy, limit, enableNetwork, disableNetwork } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         const firebaseConfig = {
@@ -30,6 +30,10 @@
 
             window.db = db;
             window.auth = auth;
+            
+            // Yritetään pakottaa verkko päälle, jos tuli offline-virhe
+            enableNetwork(db).catch(() => console.log("Verkko jo päällä"));
+            
             console.log("Firebase alustettu");
         } catch (error) {
             console.error("Firebase-virhe:", error);
@@ -150,7 +154,7 @@
     </main>
 
     <script type="module">
-        import { doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, limit, enableNetwork } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         let selectedImageBase64 = null; 
@@ -188,6 +192,9 @@
             const appId = "kitchen-ai-v1";
             
             try {
+                // Yritetään herättää tietokanta offline-tilasta
+                await enableNetwork(window.db).catch(() => {});
+
                 const profRef = doc(window.db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile');
                 const profSnap = await getDoc(profRef);
                 if(profSnap.exists()) {
@@ -201,7 +208,10 @@
                 onSnapshot(q, (snapshot) => {
                     appState.history = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
                     if(!document.getElementById('section-history').classList.contains('hidden')) renderHistory();
-                }, (err) => console.error("Snapshot error:", err));
+                }, (err) => {
+                    console.error("Snapshot error:", err);
+                    // Jos tulee offline-virhe, yritetään ladata historian hännille jotain jos mahdollista
+                });
             } catch (err) {
                 console.error("Datan latausvirhe:", err);
                 updateUI();
@@ -240,31 +250,41 @@
                     btn.innerText = "Tallenna";
                 }, 1000);
             } catch (e) {
+                console.error("Tallennusvirhe:", e);
                 alert("Virhe tallennuksessa: " + e.message);
                 btn.disabled = false;
                 btn.innerText = "Tallenna";
             }
         };
 
-        // Funktio kutsuu Gemini APIa uudelleenyrityslogiikalla
         async function callGeminiWithRetry(payload, apiKey, retries = 5) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
             
             for (let i = 0; i < retries; i++) {
                 try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
                     const response = await fetch(url, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
                     });
+
+                    clearTimeout(timeoutId);
 
                     if (response.ok) return await response.json();
                     
-                    if (response.status === 404) throw new Error("Mallia ei löydy. Tarkista API-versio.");
+                    const errorData = await response.json();
+                    console.warn(`Yritys ${i+1} epäonnistui:`, errorData);
                     
-                    // Odotetaan ennen uutta yritystä (1s, 2s, 4s...)
-                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                    if (response.status === 401 || response.status === 403) throw new Error("API-avain ei kelpaa.");
+                    if (response.status === 404) throw new Error("AI-mallia ei löydy.");
+                    
+                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
                 } catch (err) {
+                    if (err.name === 'AbortError') console.warn("Pyyntö aikakatkaistiin.");
                     if (i === retries - 1) throw err;
                 }
             }
@@ -286,7 +306,7 @@
             document.getElementById('section-input').classList.add('opacity-50', 'pointer-events-none');
 
             try {
-                let parts = [{ text: `Toimi keittiövalmentajana. Käyttäjä: ${appState.profile.name}, Tavoite: ${appState.profile.goal}. Analysoi käyttäjän syömiset tai kuitit. Anna kannustava, napakka ja rehellinen palaute suomeksi JSON-muodossa: {"coach_feedback": "..."}` }];
+                let parts = [{ text: `Toimi keittiövalmentajana. Käyttäjä: ${appState.profile.name}, Tavoite: ${appState.profile.goal}. Analysoi käyttäjän syömiset tai kuitit. Anna kannustava, napakka ja rehellinen palaute suomeksi. VASTAA PELKKÄNÄ JSONINA tässä muodossa: {"coach_feedback": "tekstisi tähän"}.` }];
                 
                 if (userText) parts.push({ text: `Käyttäjän viesti: ${userText}` });
                 if (selectedImageBase64) {
@@ -298,18 +318,24 @@
                     });
                 }
 
-                const payload = { contents: [{ parts: parts }], generationConfig: { responseMimeType: "application/json" } };
+                const payload = { contents: [{ parts: parts }] };
                 const data = await callGeminiWithRetry(payload, currentApiKey);
 
-                const result = JSON.parse(data.candidates[0].content.parts[0].text);
+                if (!data || !data.candidates) throw new Error("Tyhjä vastaus AI:lta.");
+
+                let rawText = data.candidates[0].content.parts[0].text;
+                let cleanJsonText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
                 
+                const result = JSON.parse(cleanJsonText);
+                
+                // Tallennus Firebaseen, jos yhteys on
                 if (user && window.db) {
                     const appId = "kitchen-ai-v1";
-                    await addDoc(collection(window.db, 'artifacts', appId, 'users', user.uid, 'history'), {
+                    addDoc(collection(window.db, 'artifacts', appId, 'users', user.uid, 'history'), {
                         date: new Date().toISOString(),
                         coach_feedback: result.coach_feedback,
                         userNote: userText
-                    });
+                    }).catch(err => console.error("Historian tallennus epäonnistui (offline?):", err));
                 }
                 
                 renderAnalysis(result);
@@ -318,8 +344,8 @@
                 document.getElementById('userExplanation').value = "";
                 clearImage();
             } catch (e) {
-                console.error(e);
-                alert("Virhe analyysissa: " + e.message + "\n\nVarmista, että API-avain on oikein ja malli on saatavilla.");
+                console.error("Analysis Error:", e);
+                alert("Virhe: " + (e.message.includes("API-avain") ? "API-avain on väärin." : "Yhteysvirhe. Yritä uudelleen hetken päästä."));
             } finally {
                 loader.classList.add('hidden');
                 document.getElementById('section-input').classList.remove('opacity-50', 'pointer-events-none');

@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth';
 import { Loader2, Camera, Utensils, ShoppingCart, History, Package, Settings, CheckCircle2, AlertCircle } from 'lucide-react';
 
-// Firebase configuration
+// Firebase configuration - Haetaan ympäristömuuttujista
 const firebaseConfig = JSON.parse(__firebase_config);
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -32,36 +32,39 @@ export default function App() {
   // 1. Firebase Auth Initialisation
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth error:", err);
       }
     };
     initAuth();
-    return onAuthStateChanged(auth, setUser);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
   }, []);
 
-  // 2. Data Listeners
+  // 2. Data Listeners - Aktivoituu kun käyttäjä on kirjautunut
   useEffect(() => {
     if (!user) return;
 
-    const unsubPantry = onSnapshot(
-      doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'pantry'),
-      (doc) => doc.exists() && setPantry(doc.data().items || {}),
-      (err) => console.error("Pantry error:", err)
-    );
+    const pantryRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'pantry');
+    const unsubPantry = onSnapshot(pantryRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setPantry(docSnap.data().items || {});
+      }
+    }, (err) => console.error("Pantry snapshot error:", err));
 
-    const q = query(
-      collection(db, 'artifacts', appId, 'users', user.uid, 'history'),
-      orderBy('date', 'desc'),
-      limit(5)
-    );
-    const unsubHistory = onSnapshot(
-      q,
-      (snap) => setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
-      (err) => console.error("History error:", err)
-    );
+    const historyRef = collection(db, 'artifacts', appId, 'users', user.uid, 'history');
+    const q = query(historyRef, orderBy('date', 'desc'), limit(5));
+    const unsubHistory = onSnapshot(q, (snap) => {
+      setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => console.error("History snapshot error:", err));
 
     return () => {
       unsubPantry();
@@ -69,23 +72,20 @@ export default function App() {
     };
   }, [user]);
 
-  // --- LAYER 2: Intelligence Layer v1 ---
+  // --- Intelligence Layer Logic ---
 
   const buildIntelligenceContext = () => {
     return {
       userGoal: profile.goal,
       currentPantry: Object.entries(pantry)
-        .filter(([_, data]) => data.amount > 0)
+        .filter(([_, data]) => data && data.amount > 0)
         .map(([name, data]) => `${name}: ${data.amount}${data.unit}`),
       recentEvents: history.slice(0, 3).map(h => ({
         type: h.type,
         summary: h.coach_feedback,
         items: h.items_detected?.map(i => i.name)
       })),
-      currentInput: {
-        text: text,
-        hasImage: !!image
-      }
+      currentInput: { text, hasImage: !!image }
     };
   };
 
@@ -98,54 +98,43 @@ export default function App() {
 
     try {
       const systemPrompt = `
-        YOU ARE Kitchen Intelligence AI (Analyst & Advisor). 
-        You operate within a 'Contextual Intelligence Layer'.
+        Olet 'Kitchen Intelligence AI'. Tehtäväsi on toimia analyytikkona.
+        KÄYTTÄJÄN KONTEKSTI:
+        - Tavoite: ${context.userGoal}
+        - Kaapin sisältö: ${JSON.stringify(context.currentPantry)}
+        - Historia: ${JSON.stringify(context.recentEvents)}
         
-        CONTEXT FROM SYSTEM:
-        - Goal: ${context.userGoal}
-        - Current Pantry State: ${JSON.stringify(context.currentPantry)}
-        - Recent History: ${JSON.stringify(context.recentEvents)}
-        
-        YOUR ROLE:
-        1. Analyze if input is "shopping" or "eating".
-        2. Compare with 'Current Pantry State'. 
-           - If user buys something already in pantry, note the surplus.
-           - If user eats something not in pantry, note the inconsistency.
-        3. Propose changes with a confidence score (0.0 - 1.0).
-        
-        OUTPUT FORMAT (IntelligenceProposal JSON):
+        Analysoi syöte ja palauta JSON-muodossa:
         {
-          "type": "shopping|eating|unclear",
-          "confidence": number,
-          "coach_feedback": "Finnish feedback. Address the context (e.g. surplus/needs). Max 3 sentences.",
-          "items_detected": [{"name": "string", "amount": number, "unit": "pcs|g|kg|ml|l", "action": "add|remove"}],
-          "analysis_logic": "Brief internal reasoning for the proposal",
-          "health_score": number,
-          "savings_tip": "One short concrete Finnish tip based on context."
+          "type": "shopping" tai "eating",
+          "confidence": 0.0-1.0,
+          "coach_feedback": "Lyhyt suomenkielinen palaute konteksti huomioiden.",
+          "items_detected": [{"name": "tuote", "amount": määrä, "unit": "yksikkö", "action": "add/remove"}],
+          "health_score": 1-10,
+          "savings_tip": "Lyhyt säästövinkki."
         }
       `;
-
-      const payload = {
-        contents: [{
-          parts: [
-            { text: systemPrompt },
-            { text: `Current User Input: ${context.currentInput.text}` },
-            ...(image ? [{ inlineData: { mimeType: "image/png", data: image.split(',')[1] } }] : [])
-          ]
-        }]
-      };
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: systemPrompt },
+              { text: `Syöte: ${text}` },
+              ...(image ? [{ inlineData: { mimeType: "image/png", data: image.split(',')[1] } }] : [])
+            ]
+          }]
+        })
       });
 
       const data = await response.json();
       const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      const jsonStr = rawText.match(/\{[\s\S]*\}/)[0];
-      const result = JSON.parse(jsonStr);
-
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Ei JSON-vastasta");
+      
+      const result = JSON.parse(jsonMatch[0]);
       setProposal(result);
       setActiveTab('analysis');
 
@@ -155,16 +144,7 @@ export default function App() {
       });
 
     } catch (err) {
-      console.error(err);
-      setProposal({
-        coach_feedback: "Tulkinta epäonnistui. Ole hyvä ja tarkenna syötettäsi.",
-        type: "unclear",
-        items_detected: [],
-        confidence: 0,
-        health_score: 5,
-        savings_tip: "Yritä kuvata tuotteet selkeämmin."
-      });
-      setActiveTab('analysis');
+      console.error("Analysis failed:", err);
     } finally {
       setLoading(false);
     }
@@ -181,10 +161,8 @@ export default function App() {
           amount: (newPantry[key]?.amount || 0) + item.amount, 
           unit: item.unit 
         };
-      } else {
-        if (newPantry[key]) {
-          newPantry[key].amount = Math.max(0, newPantry[key].amount - item.amount);
-        }
+      } else if (newPantry[key]) {
+        newPantry[key].amount = Math.max(0, newPantry[key].amount - item.amount);
       }
     });
 
@@ -195,157 +173,134 @@ export default function App() {
     setActiveTab('pantry');
   };
 
-  // --- LAYER 1: UI Components ---
+  // --- UI Components ---
 
   const TabButton = ({ id, label, icon: Icon }) => (
     <button 
       onClick={() => setActiveTab(id)}
-      className={`flex flex-col items-center gap-1 p-2 flex-1 transition-all ${activeTab === id ? 'text-emerald-600 scale-110' : 'text-slate-400 opacity-60'}`}
+      className={`flex flex-col items-center gap-1 p-2 flex-1 transition-all ${activeTab === id ? 'text-emerald-600 scale-105' : 'text-slate-400'}`}
     >
-      <Icon size={20} strokeWidth={activeTab === id ? 3 : 2} />
-      <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+      <Icon size={20} />
+      <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
     </button>
   );
 
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-emerald-600" size={32} />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-24">
-      <header className="bg-white border-b border-slate-200 p-4 sticky top-0 z-50">
-        <div className="max-w-md mx-auto flex justify-between items-center">
-          <h1 className="font-black italic text-xl tracking-tighter text-emerald-600 uppercase">Kitchen Intel <span className="text-[10px] bg-emerald-100 px-2 py-0.5 rounded not-italic ml-1">v1.1</span></h1>
-          <button onClick={() => setShowSettings(true)} className="p-2 bg-slate-100 rounded-full">
-            <Settings size={20} className="text-slate-600" />
-          </button>
-        </div>
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-24">
+      <header className="bg-white border-b p-4 sticky top-0 z-50 flex justify-between items-center">
+        <h1 className="font-black italic text-emerald-600 uppercase tracking-tighter">Kitchen Intel AI</h1>
+        <button onClick={() => setShowSettings(true)} className="p-2 bg-slate-100 rounded-full">
+          <Settings size={20} className="text-slate-600" />
+        </button>
       </header>
 
-      <main className="max-w-md mx-auto p-4 space-y-6">
-        
+      <main className="max-w-md mx-auto p-4 space-y-4">
         {activeTab === 'input' && (
-          <div className="space-y-6 animate-in">
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-4">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xs font-black uppercase italic text-slate-400">Uusi tapahtuma</h2>
-                <div className="text-[8px] font-bold bg-slate-100 px-2 py-1 rounded uppercase tracking-widest">Context Ready</div>
-              </div>
-              
-              <div className="flex gap-2">
-                <label className="flex-1 cursor-pointer">
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
+          <div className="bg-white p-6 rounded-3xl shadow-sm border space-y-4">
+            <div className="flex gap-2">
+              <label className="flex-1 cursor-pointer">
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
                     const reader = new FileReader();
                     reader.onloadend = () => setImage(reader.result);
                     reader.readAsDataURL(file);
-                  }} />
-                  <div className={`h-24 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center transition-all ${image ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
-                    {image ? <CheckCircle2 className="text-emerald-500" /> : <Camera className="text-slate-400" />}
-                    <span className="text-[10px] font-bold uppercase mt-1">Kuitti / Annos</span>
-                  </div>
-                </label>
-                <div className="flex-1 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col items-center justify-center p-2 text-center">
-                  <Package className="text-slate-300 mb-1" size={18} />
-                  <span className="text-[8px] font-black uppercase text-slate-400 leading-tight">Varasto:<br/>{Object.keys(pantry).length} tuotetta</span>
+                  }
+                }} />
+                <div className={`h-24 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center ${image ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`}>
+                  {image ? <CheckCircle2 className="text-emerald-500" /> : <Camera className="text-slate-400" />}
+                  <span className="text-[10px] font-bold uppercase mt-1">Kuva</span>
                 </div>
+              </label>
+              <div className="flex-1 bg-slate-50 rounded-2xl border flex flex-col items-center justify-center p-2">
+                <Package className="text-slate-300" size={20} />
+                <span className="text-[10px] font-bold text-slate-400 uppercase mt-1">Varasto: {Object.keys(pantry).length}</span>
               </div>
-
-              <textarea 
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Mitä ostit tai söit? Koutsi tietää jo mitä kaapissasi on."
-                className="w-full h-32 bg-slate-50 rounded-2xl p-4 text-sm font-medium border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-              />
-
-              <button 
-                onClick={runAnalysis}
-                disabled={loading || (!text && !image)}
-                className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm uppercase shadow-lg shadow-emerald-200 disabled:opacity-50 flex justify-center items-center gap-2"
-              >
-                {loading ? <Loader2 className="animate-spin" /> : 'Analysoi kontekstilla 🧠'}
-              </button>
             </div>
+
+            <textarea 
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Kerro mitä ostit tai söit..."
+              className="w-full h-24 bg-slate-50 rounded-2xl p-4 text-sm border focus:ring-2 focus:ring-emerald-500 outline-none"
+            />
+
+            <button 
+              onClick={runAnalysis}
+              disabled={loading || (!text && !image)}
+              className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase text-sm shadow-lg disabled:opacity-50 flex justify-center items-center gap-2"
+            >
+              {loading ? <Loader2 className="animate-spin" /> : 'Analysoi 🧠'}
+            </button>
           </div>
         )}
 
         {activeTab === 'analysis' && proposal && (
-          <div className="space-y-4 animate-in">
-            <div className="bg-emerald-900 p-8 rounded-[2.5rem] text-white space-y-4 relative overflow-hidden">
-              <div className="flex justify-between items-start relative z-10">
-                <h2 className="text-[10px] font-black uppercase tracking-widest opacity-60">Koutsin Ehdotus</h2>
-                <div className="bg-white/20 px-2 py-1 rounded text-[8px] font-bold uppercase">Luottamus: {(proposal.confidence * 100).toFixed(0)}%</div>
-              </div>
-              <p className="text-lg font-bold italic leading-tight relative z-10">"{proposal.coach_feedback}"</p>
-              
-              <div className="grid grid-cols-2 gap-3 pt-4 relative z-10">
-                <div className="bg-white/10 p-3 rounded-2xl">
-                  <span className="text-[8px] font-black uppercase opacity-60">Terveyspisteet</span>
-                  <div className="text-xl font-black">{proposal.health_score}/10</div>
+          <div className="space-y-4">
+            <div className="bg-emerald-900 p-6 rounded-3xl text-white space-y-3">
+              <h2 className="text-[10px] font-bold uppercase opacity-60">Koutsin Palaute</h2>
+              <p className="text-lg font-bold leading-tight">"{proposal.coach_feedback}"</p>
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <div className="bg-white/10 p-2 rounded-xl text-center">
+                  <span className="text-[8px] uppercase opacity-60 block">Terveys</span>
+                  <span className="text-lg font-black">{proposal.health_score}/10</span>
                 </div>
-                <div className="bg-white/10 p-3 rounded-2xl">
-                  <span className="text-[8px] font-black uppercase opacity-60">Säästövinkki</span>
-                  <div className="text-[10px] font-bold leading-tight">{proposal.savings_tip}</div>
+                <div className="bg-white/10 p-2 rounded-xl text-center">
+                  <span className="text-[8px] uppercase opacity-60 block">Säästövinkki</span>
+                  <span className="text-[10px] font-bold leading-tight block">{proposal.savings_tip}</span>
                 </div>
               </div>
             </div>
 
-            {proposal.items_detected?.length > 0 && (
-              <div className="bg-white p-6 rounded-[2rem] border border-slate-200 space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-[10px] font-black uppercase text-slate-400">Ehdotetut muutokset</h3>
-                  {proposal.confidence < 0.7 && <AlertCircle size={14} className="text-orange-500" />}
+            <div className="bg-white p-6 rounded-3xl border space-y-4">
+              <h3 className="text-[10px] font-bold uppercase text-slate-400">Ehdotetut muutokset</h3>
+              {proposal.items_detected?.map((item, idx) => (
+                <div key={idx} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl">
+                  <span className="font-bold text-sm capitalize">{item.name}</span>
+                  <span className={`text-[10px] font-black px-2 py-1 rounded ${item.action === 'add' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    {item.action === 'add' ? '+' : '-'} {item.amount} {item.unit}
+                  </span>
                 </div>
-                <div className="space-y-2">
-                  {proposal.items_detected.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl">
-                      <span className="font-bold text-sm capitalize">{item.name}</span>
-                      <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${item.action === 'add' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                        {item.action === 'add' ? '+' : '-'} {item.amount} {item.unit}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <button 
-                  onClick={confirmProposal}
-                  className="w-full bg-slate-900 text-white py-4 rounded-xl font-black text-xs uppercase"
-                >
-                  Vahvista ja päivitä ✅
-                </button>
-              </div>
-            )}
+              ))}
+              <button onClick={confirmProposal} className="w-full bg-slate-900 text-white py-4 rounded-xl font-black uppercase text-xs">Päivitä kaappi ✅</button>
+            </div>
           </div>
         )}
 
         {activeTab === 'pantry' && (
-          <div className="space-y-4 animate-in">
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-200">
-              <h2 className="text-sm font-black uppercase italic text-slate-400 mb-4">Varastotilanne</h2>
-              {Object.keys(pantry).length === 0 ? (
-                <div className="py-12 text-center text-slate-400"><Package size={48} className="mx-auto opacity-10 mb-2"/><p className="text-xs font-bold uppercase italic">Ei sisältöä</p></div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(pantry).map(([name, data]) => data.amount > 0 && (
-                    <div key={name} className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                      <div className="text-[8px] font-black uppercase text-slate-400 mb-1">{data.unit}</div>
-                      <div className="font-bold text-sm capitalize truncate">{name}</div>
-                      <div className="text-lg font-black text-emerald-600">{data.amount}</div>
-                    </div>
-                  ))}
+          <div className="bg-white p-6 rounded-3xl border">
+            <h2 className="text-xs font-bold uppercase text-slate-400 mb-4 tracking-widest">Kaapin sisältö</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(pantry).map(([name, data]) => data.amount > 0 && (
+                <div key={name} className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                  <div className="text-[8px] font-bold text-slate-400 uppercase">{data.unit}</div>
+                  <div className="font-bold text-sm capitalize truncate">{name}</div>
+                  <div className="text-lg font-black text-emerald-600">{data.amount}</div>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         )}
 
         {activeTab === 'history' && (
-          <div className="space-y-3 animate-in">
-            <h2 className="text-sm font-black uppercase italic text-slate-400 px-2">Historia</h2>
+          <div className="space-y-2">
+            <h2 className="text-xs font-bold uppercase text-slate-400 px-2 tracking-widest">Historia</h2>
             {history.map(item => (
-              <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-4">
+              <div key={item.id} className="bg-white p-4 rounded-2xl border flex gap-4">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'shopping' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
                   {item.type === 'shopping' ? <ShoppingCart size={18} /> : <Utensils size={18} />}
                 </div>
-                <div className="flex-1">
+                <div>
                   <div className="text-[8px] font-bold text-slate-400 uppercase">{item.date ? new Date(item.date).toLocaleDateString('fi-FI') : '...'}</div>
-                  <p className="text-xs font-bold text-slate-700 line-clamp-2">"{item.coach_feedback}"</p>
+                  <p className="text-xs font-bold text-slate-700 leading-snug">{item.coach_feedback}</p>
                 </div>
               </div>
             ))}
@@ -353,29 +308,22 @@ export default function App() {
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3 pb-8 z-50">
-        <div className="max-w-md mx-auto flex justify-around">
-          <TabButton id="input" label="Syötä" icon={Camera} />
-          <TabButton id="pantry" label="Kaappi" icon={Package} />
-          <TabButton id="history" label="Historia" icon={History} />
-        </div>
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-3 pb-8 z-50 flex justify-around">
+        <TabButton id="input" label="Syötä" icon={Camera} />
+        <TabButton id="pantry" label="Kaappi" icon={Package} />
+        <TabButton id="history" label="Historia" icon={History} />
       </nav>
 
       {showSettings && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 space-y-6 shadow-2xl animate-in">
-            <h2 className="font-black italic text-xl uppercase tracking-tighter">Profiili & Tavoite</h2>
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 space-y-6">
+            <h2 className="font-black italic text-xl uppercase tracking-tighter">Asetukset</h2>
             <div className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-slate-400">Nimi</label>
-                <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className="w-full bg-slate-100 p-3 rounded-xl font-bold outline-none" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-slate-400">Päätavoite</label>
+                <label className="text-[10px] font-bold uppercase text-slate-400">Tavoite</label>
                 <select value={profile.goal} onChange={(e) => setProfile({...profile, goal: e.target.value})} className="w-full bg-slate-100 p-3 rounded-xl font-bold outline-none">
                   <option>Säästäminen</option>
                   <option>Terveellisyys</option>
-                  <option>Ekologisuus</option>
                 </select>
               </div>
             </div>

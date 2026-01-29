@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kitchen Intelligence AI</title>
+    <meta name="theme-color" content="#10b981">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // HUOM: Täytä tähän omat Firebase-konfiguraatiosi, kun olet luonut projektin console.firebase.google.com
+        const firebaseConfig = {
+            apiKey: "AIza...",
+            authDomain: "projekti.firebaseapp.com",
+            projectId: "projekti-id",
+            storageBucket: "projekti.appspot.com",
+            messagingSenderId: "...",
+            appId: "..."
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        window.db = db;
+        window.auth = auth;
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .tab-active { border-bottom: 4px solid #10b981; color: #065f46; font-weight: 800; transform: translateY(-2px); }
+        .animate-in { animation: fadeInUp 0.4s ease-out forwards; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .analysis-card { background: linear-gradient(135deg, #064e3b 0%, #065f46 100%); }
+        .chat-bubble-user { border-radius: 20px 20px 4px 20px; background: #f1f5f9; border: 1px solid #e2e8f0; }
+        .chat-bubble-ai { border-radius: 20px 20px 20px 4px; background: #ecfdf5; border: 1px solid #d1fae5; }
+        .trend-up { color: #10b981; }
+        .trend-down { color: #ef4444; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-24 text-slate-900">
+
+    <header class="bg-emerald-600 text-white p-6 shadow-lg sticky top-0 z-30 rounded-b-[3rem]">
+        <div class="flex justify-between items-center max-w-md mx-auto">
+            <h1 class="text-xl font-black italic tracking-tighter">COACH AI 🧠</h1>
+            <div class="flex items-center gap-2">
+                <div id="syncStatus" class="w-2 h-2 rounded-full bg-red-400"></div>
+                <button onclick="toggleProfile()" class="bg-emerald-700 p-2 rounded-full border border-emerald-500/50">
+                    <span class="text-lg">👤</span>
+                </button>
+            </div>
+        </div>
+        <nav class="flex justify-around mt-6 text-[10px] uppercase tracking-[0.2em] font-black gap-4">
+            <button onclick="switchTab('input')" id="tab-input" class="pb-2 tab-active transition-all">Syötä</button>
+            <button onclick="switchTab('analysis')" id="tab-analysis" class="pb-2 opacity-60 transition-all">Analyysi</button>
+            <button onclick="switchTab('history')" id="tab-history" class="pb-2 opacity-60 transition-all">Matkasi</button>
+        </nav>
+    </header>
+
+    <!-- PROFIILI MODAALI -->
+    <div id="profileModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-4 shadow-2xl animate-in">
+            <h2 class="font-black text-xl italic uppercase">Profiili</h2>
+            <p class="text-[10px] text-slate-400 font-bold uppercase">Datan synkronointi käytössä ☁️</p>
+            <div class="space-y-2">
+                <label class="text-[10px] font-black uppercase text-slate-400">Nimi</label>
+                <input type="text" id="profName" class="w-full bg-slate-50 p-3 rounded-xl border-0 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div class="space-y-2">
+                <label class="text-[10px] font-black uppercase text-slate-400">Tavoite</label>
+                <select id="profGoal" class="w-full bg-slate-50 p-3 rounded-xl border-0 font-bold text-sm outline-none">
+                    <option value="Säästäminen">Säästäminen 💰</option>
+                    <option value="Terveellisyys">Terveellisyys 🥗</option>
+                    <option value="Tasapaino">Molemmat ⚖️</option>
+                </select>
+            </div>
+            <div class="space-y-2">
+                <label class="text-[10px] font-black uppercase text-slate-400">Rajoitukset</label>
+                <input type="text" id="profLimits" placeholder="esm. Gluteeniton" class="w-full bg-slate-50 p-3 rounded-xl border-0 font-bold text-sm outline-none">
+            </div>
+            <div class="flex gap-2 pt-4">
+                <button onclick="saveProfile()" class="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Tallenna</button>
+                <button onclick="toggleProfile()" class="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black uppercase text-[10px]">Sulje</button>
+            </div>
+        </div>
+    </div>
+
+    <main class="max-w-md mx-auto p-4 space-y-6">
+        
+        <section id="section-input" class="space-y-6 animate-in">
+            <div class="bg-white p-8 rounded-[2.5rem] border border-emerald-100 shadow-xl text-center space-y-4">
+                <h2 id="welcomeText" class="text-lg font-black text-emerald-900 italic uppercase">Ladataan koutsia...</h2>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="document.getElementById('imageInput').click()" 
+                        class="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] text-slate-700 font-black flex flex-col items-center gap-2 active:scale-95 transition-all">
+                        <span class="text-3xl">🧾</span>
+                        <span class="text-[8px] uppercase tracking-widest">Kuitti/Ruoka</span>
+                    </button>
+                    <input type="file" id="imageInput" accept="image/*" multiple class="hidden">
+                    
+                    <div class="p-6 bg-emerald-50 border-2 border-emerald-100 rounded-[2rem] flex flex-col items-center justify-center">
+                        <span class="text-2xl font-black text-emerald-700" id="imageCount">0</span>
+                        <span class="text-[8px] uppercase font-black text-emerald-600">Kuvaa</span>
+                    </div>
+                </div>
+
+                <textarea id="userExplanation" placeholder="Miten päivä on mennyt? Koutsi kuuntelee..." 
+                    class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none h-32 resize-none"></textarea>
+
+                <button id="analyzeBtn" onclick="runComprehensiveAnalysis()" class="w-full bg-emerald-600 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl hover:bg-emerald-700 transition-all">
+                    ANALYSOI PÄIVÄ 🚀
+                </button>
+            </div>
+
+            <div id="loading" class="hidden text-center py-12 bg-white rounded-[2.5rem] shadow-sm">
+                <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p class="text-emerald-800 font-black text-[10px] uppercase tracking-widest italic">Koutsi yhdistelee pilvidataa...</p>
+            </div>
+        </section>
+
+        <section id="section-analysis" class="hidden space-y-4 animate-in">
+            <div id="analysisResult"></div>
+            <div id="chatSection" class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4 hidden">
+                <h4 class="font-black text-[10px] uppercase text-slate-400 tracking-widest italic">Pikakysymys koutsilta</h4>
+                <div id="chatContainer" class="space-y-4 max-h-60 overflow-y-auto pr-2"></div>
+                <div class="flex gap-2 pt-2">
+                    <input type="text" id="chatInput" placeholder="Vastaa koutsille..." class="flex-1 bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold outline-none">
+                    <button onclick="sendChatMessage()" class="bg-emerald-600 text-white px-6 rounded-xl font-black text-[10px] uppercase">LÄHETÄ</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="section-history" class="hidden space-y-4 animate-in text-center">
+            <h2 class="font-black text-lg text-slate-800 italic uppercase">Matkasi Trendit</h2>
+            <div id="trendChart" class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex justify-around items-center"></div>
+            <div id="historyContainer" class="space-y-3"></div>
+        </section>
+
+    </main>
+
+    <script type="module">
+        import { doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        const apiKey = ""; // Gemini API avain
+        let imageFiles = []; 
+        let user = null;
+        let appState = {
+            history: [],
+            profile: { name: "Käyttäjä", goal: "Tasapaino", limits: "" }
+        };
+
+        // ALUSTUS
+        onAuthStateChanged(window.auth, async (u) => {
+            if (u) {
+                user = u;
+                document.getElementById('syncStatus').classList.replace('bg-red-400', 'bg-green-400');
+                loadData();
+            } else {
+                signInAnonymously(window.auth);
+            }
+        });
+
+        async function loadData() {
+            if(!user) return;
+            const appId = "kitchen-ai-v1";
+            
+            // Lataa profiili
+            const profRef = doc(window.db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile');
+            const profSnap = await getDoc(profRef);
+            if(profSnap.exists()) {
+                appState.profile = profSnap.data();
+                updateUI();
+            }
+
+            // Kuuntele historiaa
+            const histRef = collection(window.db, 'artifacts', appId, 'users', user.uid, 'history');
+            const q = query(histRef, orderBy("date", "desc"), limit(20));
+            onSnapshot(q, (snapshot) => {
+                appState.history = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
+                if(document.getElementById('section-history').classList.contains('hidden') === false) {
+                    renderHistory();
+                }
+            }, (err) => console.error("Firestore error:", err));
+            
+            updateUI();
+        }
+
+        window.saveProfile = async () => {
+            if(!user) return;
+            appState.profile = {
+                name: document.getElementById('profName').value || "Käyttäjä",
+                goal: document.getElementById('profGoal').value,
+                limits: document.getElementById('profLimits').value
+            };
+            const appId = "kitchen-ai-v1";
+            await setDoc(doc(window.db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile'), appState.profile);
+            updateUI();
+            toggleProfile();
+        };
+
+        window.runComprehensiveAnalysis = async () => {
+            const loader = document.getElementById('loading');
+            const userText = document.getElementById('userExplanation').value;
+            if(!userText && imageFiles.length === 0) return alert("Kerro jotain tai lataa kuva!");
+
+            loader.classList.remove('hidden');
+            document.getElementById('section-input').classList.add('opacity-50', 'pointer-events-none');
+
+            const imageParts = imageFiles.map(b64 => ({ inlineData: { mimeType: "image/jpeg", data: b64.split(',')[1] } }));
+            const memory = appState.history.slice(0, 3).map(h => `Palaute: ${h.coach_feedback}`).join("\n");
+            
+            const prompt = `Toimi terveysvalmentajana ja talousneuvojana. Käyttäjä: ${appState.profile.name}. Tavoite: ${appState.profile.goal}.
+            Muisti edellisistä: ${memory}. Analysoi uusi viesti: "${userText}".
+            Vastaa JSON: { "coach_feedback": "...", "score": {"health": 0, "wallet": 0}, "insight": "...", "question": "..." }`;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }, ...imageParts] }],
+                        generationConfig: { responseMimeType: "application/json" }
+                    })
+                });
+
+                const data = await response.json();
+                const result = JSON.parse(data.candidates[0].content.parts[0].text);
+                
+                // Tallenna Firestoreen
+                const appId = "kitchen-ai-v1";
+                await addDoc(collection(window.db, 'artifacts', appId, 'users', user.uid, 'history'), {
+                    date: new Date().toISOString(),
+                    ...result,
+                    userNote: userText
+                });
+                
+                renderAnalysis(result);
+                switchTab('analysis');
+            } catch (e) {
+                console.error(e);
+                alert("Virhe analyysissa. Tarkista API-avain.");
+            } finally {
+                loader.classList.add('hidden');
+                document.getElementById('section-input').classList.remove('opacity-50', 'pointer-events-none');
+                imageFiles = []; document.getElementById('imageCount').innerText = "0";
+                document.getElementById('userExplanation').value = "";
+            }
+        };
+
+        // Näitä tarvitaan globaalisti HTML-tageissa
+        window.switchTab = (tab) => {
+            document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+            document.querySelectorAll('nav button').forEach(b => { 
+                b.classList.remove('tab-active'); b.classList.add('opacity-60'); 
+            });
+            document.getElementById(`section-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).classList.add('tab-active');
+            document.getElementById(`tab-${tab}`).classList.remove('opacity-60');
+            if(tab === 'history') renderHistory();
+        };
+
+        window.toggleProfile = () => {
+            const modal = document.getElementById('profileModal');
+            modal.classList.toggle('hidden');
+            if(!modal.classList.contains('hidden')) {
+                document.getElementById('profName').value = appState.profile.name;
+                document.getElementById('profGoal').value = appState.profile.goal;
+                document.getElementById('profLimits').value = appState.profile.limits;
+            }
+        };
+
+        function updateUI() {
+            document.getElementById('welcomeText').innerText = `Moi ${appState.profile.name}!`;
+        }
+
+        function renderAnalysis(res) {
+            const resultDiv = document.getElementById('analysisResult');
+            resultDiv.innerHTML = `
+                <div class="analysis-card p-8 rounded-[2.5rem] text-white shadow-2xl space-y-4 animate-in">
+                    <h3 class="font-black text-xl italic uppercase">Koutsin tsemppi</h3>
+                    <p class="text-emerald-100 text-sm italic">"${res.coach_feedback}"</p>
+                    <div class="grid grid-cols-2 gap-4 border-t border-emerald-800/50 pt-4">
+                        <div class="text-center"><div class="text-[8px] uppercase opacity-60">Terveys</div><div class="text-2xl font-black">${res.score.health}/10</div></div>
+                        <div class="text-center"><div class="text-[8px] uppercase opacity-60">Lompakko</div><div class="text-2xl font-black">${res.score.wallet}/10</div></div>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm mt-4 flex items-center gap-3">
+                    <span class="text-2xl">💡</span>
+                    <p class="text-xs font-bold text-slate-700">${res.insight}</p>
+                </div>
+            `;
+            document.getElementById('chatSection').classList.remove('hidden');
+            document.getElementById('chatContainer').innerHTML = `<div class="chat-bubble-ai p-4 text-xs font-bold text-emerald-900 animate-in italic">"${res.question}"</div>`;
+        }
+
+        function renderHistory() {
+            const cont = document.getElementById('historyContainer');
+            const trend = document.getElementById('trendChart');
+            
+            if(appState.history.length === 0) {
+                cont.innerHTML = `<p class="opacity-20 py-20 uppercase font-black text-xs">Ei tallennettua dataa</p>`;
+                return;
+            }
+
+            // Trendi
+            if(appState.history.length >= 2) {
+                const h1 = appState.history[0].score.health;
+                const h2 = appState.history[1].score.health;
+                trend.innerHTML = `<div class="text-center font-black uppercase text-[10px] text-slate-400">Terveyskehitys: <span class="${h1 >= h2 ? 'text-emerald-500':'text-red-500'}">${h1 >= h2 ? '▲' : '▼'}</span></div>`;
+            }
+
+            cont.innerHTML = appState.history.map(h => `
+                <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm text-left">
+                    <div class="flex justify-between text-[8px] font-black uppercase text-slate-300 mb-1">
+                        <span>${new Date(h.date).toLocaleDateString()}</span>
+                        <span class="text-emerald-500">H:${h.score.health} W:${h.score.wallet}</span>
+                    </div>
+                    <p class="text-[10px] font-bold text-slate-600 italic">"${h.coach_feedback}"</p>
+                </div>
+            `).join('');
+        }
+
+        // Kuvat ja pakkaus
+        document.getElementById('imageInput').addEventListener('change', async (e) => {
+            for (let f of e.target.files) {
+                const reader = new FileReader();
+                reader.readAsDataURL(f);
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.src = ev.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const scale = 800 / img.width;
+                        canvas.width = 800;
+                        canvas.height = img.height * scale;
+                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                        imageFiles.push(canvas.toDataURL('image/jpeg', 0.7));
+                        document.getElementById('imageCount').innerText = imageFiles.length;
+                    };
+                };
+            }
+        });
+
+        window.sendChatMessage = () => {
+            const input = document.getElementById('chatInput');
+            if(!input.value) return;
+            document.getElementById('chatContainer').innerHTML += `<div class="chat-bubble-user p-4 text-xs font-bold text-slate-700 ml-8 mt-2">${input.value}</div>`;
+            input.value = "";
+            setTimeout(() => {
+                document.getElementById('chatContainer').innerHTML += `<div class="chat-bubble-ai p-4 text-xs font-bold text-emerald-900 mr-8 mt-2">"Selvä homma, pidetään mielessä!"</div>`;
+            }, 800);
+        };
+
+    </script>
+</body>
+</html>

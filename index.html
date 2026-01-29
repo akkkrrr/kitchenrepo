@@ -16,6 +16,7 @@
         .analysis-card { background: linear-gradient(135deg, #064e3b 0%, #065f46 100%); }
         .glass-effect { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
         .preview-img { width: 100%; height: 100%; object-fit: cover; border-radius: 1.5rem; }
+        .inventory-badge { background: #ecfdf5; color: #065f46; border: 1px solid #10b981; }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen pb-24 text-slate-900">
@@ -30,10 +31,11 @@
                 </button>
             </div>
         </div>
-        <nav class="flex justify-around mt-6 text-[10px] uppercase tracking-[0.2em] font-black gap-4">
-            <button onclick="window.switchTab('input')" id="tab-input" class="pb-2 tab-active transition-all">Syötä</button>
-            <button onclick="window.switchTab('analysis')" id="tab-analysis" class="pb-2 opacity-60 transition-all">Analyysi</button>
-            <button onclick="window.switchTab('history')" id="tab-history" class="pb-2 opacity-60 transition-all">Historia</button>
+        <nav class="flex justify-around mt-6 text-[10px] uppercase tracking-[0.2em] font-black gap-4 overflow-x-auto">
+            <button onclick="window.switchTab('input')" id="tab-input" class="pb-2 tab-active transition-all whitespace-nowrap">Syötä</button>
+            <button onclick="window.switchTab('pantry')" id="tab-pantry" class="pb-2 opacity-60 transition-all whitespace-nowrap">Kaappi 📦</button>
+            <button onclick="window.switchTab('analysis')" id="tab-analysis" class="pb-2 opacity-60 transition-all whitespace-nowrap">Analyysi</button>
+            <button onclick="window.switchTab('history')" id="tab-history" class="pb-2 opacity-60 transition-all whitespace-nowrap">Historia</button>
         </nav>
     </header>
 
@@ -57,7 +59,6 @@
             <div class="space-y-2">
                 <label class="text-[10px] font-black uppercase text-slate-400">Gemini API-avain</label>
                 <input type="password" id="profApiKey" placeholder="AIzaSy..." class="w-full bg-slate-50 p-3 rounded-xl border-0 font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500">
-                <p class="text-[8px] text-slate-400">Hae avain: <a href="https://aistudio.google.com/" target="_blank" class="underline text-emerald-600">aistudio.google.com</a></p>
             </div>
             <div class="flex gap-2 pt-4">
                 <button id="saveBtn" onclick="window.saveProfile()" class="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-emerald-700 active:scale-95 transition-all">Tallenna</button>
@@ -67,244 +68,211 @@
     </div>
 
     <main class="max-w-md mx-auto p-4 space-y-6">
+        <!-- INPUT SECTION -->
         <section id="section-input" class="space-y-6 animate-in">
             <div class="bg-white p-8 rounded-[2.5rem] border border-emerald-100 shadow-xl text-center space-y-4">
-                <h2 id="welcomeText" class="text-lg font-black text-emerald-900 italic uppercase">Hei!</h2>
+                <h2 id="welcomeText" class="text-lg font-black text-emerald-900 italic uppercase">Mitä tänään?</h2>
                 
                 <div class="grid grid-cols-2 gap-3">
                     <button onclick="document.getElementById('imageInput').click()" 
                         class="relative overflow-hidden p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] text-slate-700 font-black flex flex-col items-center gap-2 active:scale-95 hover:bg-slate-100 transition-all min-h-[120px]">
                         <div id="imagePreviewContainer" class="absolute inset-0 hidden">
                             <img id="imagePreview" src="" class="preview-img">
-                            <div class="absolute inset-0 bg-black/20 flex items-center justify-center">
-                                <span class="text-white text-xs font-black uppercase bg-black/40 px-2 py-1 rounded">Vaihda</span>
-                            </div>
                         </div>
                         <div id="imagePlaceholder" class="flex flex-col items-center gap-2">
-                            <span class="text-3xl">🧾</span>
-                            <span class="text-[8px] uppercase tracking-widest">Kuitti/Ruoka</span>
+                            <span class="text-3xl">📸</span>
+                            <span class="text-[8px] uppercase tracking-widest leading-tight">Kuva kuitista<br>tai ruoasta</span>
                         </div>
                     </button>
                     <input type="file" id="imageInput" accept="image/*" class="hidden">
                     
                     <div class="p-6 bg-emerald-50 border-2 border-emerald-100 rounded-[2rem] flex flex-col items-center justify-center">
                         <span class="text-2xl font-black text-emerald-700" id="imageCount">0</span>
-                        <span class="text-[8px] uppercase font-black text-emerald-600 text-center leading-tight">Kuva<br>valittu</span>
+                        <span class="text-[8px] uppercase font-black text-emerald-600 text-center leading-tight">Valittuna</span>
                         <button onclick="window.clearImage()" id="clearImgBtn" class="hidden mt-2 text-[8px] text-red-500 font-bold uppercase underline">Poista</button>
                     </div>
                 </div>
 
-                <textarea id="userExplanation" placeholder="Kerro koutsille: mitä söit tai mitä ostit?" 
-                    class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none h-32 resize-none"></textarea>
+                <textarea id="userExplanation" placeholder="Kerro koutsille: 'Ostin nämä' tai 'Söin tätä'..." 
+                    class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none h-32 resize-none transition-all"></textarea>
                 
                 <button id="analyzeBtn" onclick="window.runComprehensiveAnalysis()" class="w-full bg-emerald-600 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl hover:bg-emerald-700 active:scale-95 transition-all">
-                    ANALYSOI VALINNAT 🚀
+                    ANALYSOI 🚀
                 </button>
             </div>
             
             <div id="loading" class="hidden text-center py-12">
                 <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p class="text-emerald-800 font-black text-[10px] uppercase italic text-center">Koutsi miettii vastausta...</p>
+                <p id="loadingText" class="text-emerald-800 font-black text-[10px] uppercase italic text-center">Koutsi laskee algoritmeja...</p>
             </div>
         </section>
 
-        <section id="section-analysis" class="hidden space-y-4 animate-in">
-            <div id="analysisResult"></div>
-            <button onclick="window.switchTab('input')" class="w-full text-slate-400 font-black text-[10px] uppercase py-4 hover:text-emerald-600 transition-colors">
-                ← Uusi analyysi
-            </button>
+        <!-- PANTRY SECTION -->
+        <section id="section-pantry" class="hidden space-y-4 animate-in">
+            <div class="bg-white p-6 rounded-[2.5rem] shadow-lg border border-emerald-50" id="pantryStats">
+                <h3 class="font-black text-sm uppercase italic mb-4">Kaapin sisältö (Arvio)</h3>
+                <div id="pantryContainer" class="flex flex-wrap gap-2">
+                    <!-- Inventory items go here -->
+                </div>
+                <button id="recipeSuggestBtn" onclick="window.suggestRecipes()" class="w-full mt-6 bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest">
+                    Mitä voin kokata? 🍳
+                </button>
+            </div>
         </section>
 
+        <!-- ANALYSIS SECTION -->
+        <section id="section-analysis" class="hidden space-y-4 animate-in">
+            <div id="analysisResult"></div>
+            <div id="inventoryActions" class="hidden bg-emerald-50 p-6 rounded-[2rem] border border-emerald-200 space-y-3">
+                <p class="text-[10px] font-black uppercase text-emerald-700">Päivitetäänkö kaappiin?</p>
+                <div id="detectedItems" class="flex flex-wrap gap-2"></div>
+                <button onclick="window.confirmInventory()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs">Päivitä kaappi ✅</button>
+            </div>
+        </section>
+
+        <!-- HISTORY SECTION -->
         <section id="section-history" class="hidden space-y-4 animate-in text-center">
-            <h2 class="font-black text-lg text-slate-800 italic uppercase">Aiemmat valinnat</h2>
+            <h2 class="font-black text-lg text-slate-800 italic uppercase">Historia</h2>
             <div id="historyContainer" class="space-y-3"></div>
         </section>
     </main>
 
-    <!-- Firebase & App Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, limit, enableNetwork } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // Global configuration
         const firebaseConfig = JSON.parse('{"apiKey":"AIzaSyAohcWNh4slofn16Z-WRwss7CqzVnoilp4","authDomain":"coach-ai-70259.firebaseapp.com","projectId":"coach-ai-70259","storageBucket":"coach-ai-70259.firebasestorage.app","messagingSenderId":"974738252750","appId":"1:974738252750:web:59ea5f05414aa58e50419f","measurementId":"G-SR166RBL63"}');
 
-        // App state
         let db, auth, user;
         let selectedImageBase64 = null;
         let selectedMimeType = "image/jpeg";
-        let historyUnsubscribe = null;
+        let lastDetectedItems = [];
+        let unsubPantry = null;
+        let unsubHistory = null;
         
         const appState = {
             history: [],
-            profile: {
-                name: "Käyttäjä",
-                goal: "Tasapaino",
-                apiKey: localStorage.getItem('gemini_api_key') || ""
-            }
+            pantry: {},
+            profile: { name: "Käyttäjä", goal: "Tasapaino", apiKey: localStorage.getItem('gemini_api_key') || "" }
         };
 
-        // Initialize Firebase
-        try {
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-            
-            // Re-enable network to combat offline cache lock
-            enableNetwork(db).catch(() => {});
-        } catch (error) {
-            console.error("Firebase init failed:", error);
-        }
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
 
-        // --- AUTH & DATA SYNC ---
-
-        if (!auth) {
-            console.error("Auth-palvelu ei ole käytettävissä (Firebase-virhe).");
-        } else {
-            onAuthStateChanged(auth, async (u) => {
-                if (u) {
-                    user = u;
-                    document.getElementById('syncStatus').classList.replace('bg-red-400', 'bg-green-400');
-                    await loadData();
+        onAuthStateChanged(auth, async (u) => {
+            if (u) {
+                user = u;
+                document.getElementById('syncStatus').classList.replace('bg-red-400', 'bg-green-400');
+                loadUserData();
+            } else {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
-                    // Yritetään anonyymiä kirjautumista jos ei ole useria
-                    signInAnonymously(auth).catch(err => console.error("Anonyymi kirjautuminen epäonnistui:", err));
+                    await signInAnonymously(auth);
                 }
-            });
-        }
+            }
+        });
 
-        async function loadData() {
-            if (!user || !db) return;
+        async function loadUserData() {
+            if (!user) return;
             const appId = "kitchen-ai-v1";
             
-            // Load Profile with server-first fallback
-            const profRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile');
-            try {
-                const profSnap = await getDoc(profRef);
-                if (profSnap.exists()) {
-                    const serverData = profSnap.data();
-                    const storedKey = localStorage.getItem('gemini_api_key') || "";
-                    
-                    // Suojataan API-avain niin ettei se pyyhkiydy jos Firestore-dokumentissa sitä ei ole
-                    appState.profile = { 
-                        ...appState.profile, 
-                        ...serverData,
-                        apiKey: storedKey || serverData.apiKey || appState.profile.apiKey 
-                    };
-                }
-            } catch (e) {
-                console.warn("Profiilin haku epäonnistui, käytetään paikallisia asetuksia:", e);
+            // Ladataan profiili
+            const profSnap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'profile'));
+            if (profSnap.exists()) {
+                appState.profile = {...appState.profile, ...profSnap.data()};
+                document.getElementById('profName').value = appState.profile.name;
+                document.getElementById('profGoal').value = appState.profile.goal;
             }
-            updateUI();
+            document.getElementById('profApiKey').value = appState.profile.apiKey || localStorage.getItem('gemini_api_key') || "";
+            
+            // Siivotaan vanhat kuuntelijat
+            if (unsubPantry) unsubPantry();
+            if (unsubHistory) unsubHistory();
 
-            // Load History with unsubscribe protection
-            if (historyUnsubscribe) historyUnsubscribe();
-            
-            const histRef = collection(db, 'artifacts', appId, 'users', user.uid, 'history');
-            const q = query(histRef, orderBy("date", "desc"), limit(20));
-            
-            historyUnsubscribe = onSnapshot(q, (snapshot) => {
-                appState.history = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            // Ladataan kaappi (Pantry)
+            unsubPantry = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'pantry'), (snap) => {
+                if (snap.exists()) {
+                    appState.pantry = snap.data().items || {};
+                    renderPantry();
+                }
+            }, (err) => console.error("Pantry sync fail", err));
+
+            // Ladataan historia
+            const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'history'), orderBy("date", "desc"), limit(20));
+            unsubHistory = onSnapshot(q, (snapshot) => {
+                appState.history = snapshot.docs.map(d => d.data());
                 if (!document.getElementById('section-history').classList.contains('hidden')) renderHistory();
-            }, (err) => {
-                console.error("Historialistan synkronointivirhe:", err);
-            });
+            }, (err) => console.error("History sync fail", err));
+            
+            updateUI();
         }
 
-        // --- CORE FUNCTIONS ---
-
         window.saveProfile = async () => {
-            if (!user || !db) return;
             const key = document.getElementById('profApiKey').value.trim();
-            const btn = document.getElementById('saveBtn');
-            const feedback = document.getElementById('saveFeedback');
-            
-            btn.disabled = true;
-            btn.innerText = "Tallennetaan...";
+            const name = document.getElementById('profName').value || "Käyttäjä";
+            const goal = document.getElementById('profGoal').value;
 
-            appState.profile.name = document.getElementById('profName').value || "Käyttäjä";
-            appState.profile.goal = document.getElementById('profGoal').value;
+            appState.profile.name = name;
+            appState.profile.goal = goal;
             appState.profile.apiKey = key;
             localStorage.setItem('gemini_api_key', key);
 
-            try {
+            if (user) {
                 await setDoc(doc(db, 'artifacts', 'kitchen-ai-v1', 'users', user.uid, 'settings', 'profile'), {
-                    name: appState.profile.name,
-                    goal: appState.profile.goal
+                    name, goal, apiKey: key
                 });
-                
-                feedback.classList.remove('hidden');
-                updateUI();
-                setTimeout(() => {
-                    feedback.classList.add('hidden');
-                    window.toggleProfile();
-                }, 1000);
-            } catch (e) {
-                console.error("Tallennusvirhe:", e);
-                alert("Virhe asetusten tallentamisessa: " + e.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "Tallenna";
             }
+
+            updateUI();
+            const feedback = document.getElementById('saveFeedback');
+            feedback.classList.remove('hidden');
+            setTimeout(() => {
+                feedback.classList.add('hidden');
+                window.toggleProfile();
+            }, 800);
         };
 
-        async function callGeminiWithRetry(payload, apiKey, retries = 5) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-            
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 35000);
-
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload),
-                        signal: controller.signal
-                    });
-
-                    clearTimeout(timeoutId);
-
-                    if (response.ok) return await response.json();
-                    
-                    // Fail fast on auth errors
-                    if (response.status === 401 || response.status === 403) {
-                        throw new Error("API-avain ei kelpaa tai se on vanhentunut.");
-                    }
-                    
-                    // Only retry on rate limits or server errors
-                    if (response.status !== 429 && response.status < 500) {
-                        const errBody = await response.json();
-                        throw new Error(errBody.error?.message || "Rajapintavirhe");
-                    }
-
-                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
-                } catch (err) {
-                    if (i === retries - 1 || err.message.includes("API-avain")) throw err;
-                }
-            }
-        }
-
         window.runComprehensiveAnalysis = async () => {
-            const currentApiKey = appState.profile.apiKey || localStorage.getItem('gemini_api_key');
-            if (!currentApiKey) {
-                alert("API-avain puuttuu. Lisää se asetuksista.");
+            const apiKey = appState.profile.apiKey || localStorage.getItem('gemini_api_key');
+            if (!apiKey) {
                 window.toggleProfile();
-                return;
+                return alert("API-avain puuttuu asetuksista!");
             }
             
             const userText = document.getElementById('userExplanation').value;
-            if (!userText && !selectedImageBase64) return alert("Kirjoita jotain tai valitse kuva!");
-
             const loader = document.getElementById('loading');
             loader.classList.remove('hidden');
-            document.getElementById('section-input').classList.add('opacity-50', 'pointer-events-none');
 
             try {
-                let parts = [{ text: `Toimi keittiövalmentajana. Käyttäjä: ${appState.profile.name}, Tavoite: ${appState.profile.goal}. Analysoi käyttäjän syömiset tai kuitit. Anna kannustava, napakka ja rehellinen palaute suomeksi. VASTAA PELKKÄNÄ JSONINA tässä muodossa: {"coach_feedback": "tekstisi tähän"}. Jos et pysty tuottamaan JSONia, palauta {"error":"non_json"}.` }];
+                // Tiukka ohjeistus Kitchen Intelligence AI -roolille
+                const systemPrompt = `
+                Olet Kitchen Intelligence AI -koutsi. Tehtäväsi: Analysoi ruokakuitti tai annos.
+                TULOSTE: Palauta VAIN validi JSON-objekti. Ei markdownia, ei selityksiä JSONin ulkopuolella.
                 
-                if (userText) parts.push({ text: `Käyttäjän viesti: ${userText}` });
+                JSON SKEEMA:
+                {
+                  "coach_feedback": "Napakka, rehellinen ja kannustava palaute suomeksi (max 3 virkettä).",
+                  "type": "shopping|eating|unclear",
+                  "items_detected": [
+                    {"name": "Tuote", "amount": 1, "unit": "pcs|g|kg|ml|l", "action": "add|remove"}
+                  ],
+                  "health_score": 1-10,
+                  "savings_tip": "Yksi konkreettinen säästövinkki suomeksi."
+                }
+                
+                SÄÄNNÖT:
+                1. Osto (kuitti/ostoslista) -> type="shopping", action="add".
+                2. Syöminen (annos/söin) -> type="eating", action="remove".
+                3. Jos epäselvä -> type="unclear", items_detected=[]. Feedbackissa pyydä tarkennusta.
+                4. Tuotteet: Vain ne joista olet varma. Jos määrä epäselvä, käytä amount=1, unit="pcs".
+                5. Health Score: Eating = terveellisyys/tasapaino. Shopping = korin yleislaatu.
+                `;
+
+                let parts = [{ text: systemPrompt }];
+                if (userText) parts.push({ text: `Käyttäjän syöte: ${userText}` });
                 if (selectedImageBase64) {
                     parts.push({ 
                         inlineData: { 
@@ -314,66 +282,170 @@
                     });
                 }
 
-                const data = await callGeminiWithRetry({ contents: [{ parts }] }, currentApiKey);
-                
-                // Yhdistetään kaikki tekstipartit vikasietoisesti
-                const rawText = data?.candidates?.[0]?.content?.parts
-                    ?.map(p => p.text || "")
-                    .join("\n") || "";
-                
-                // Robust JSON extraction using Regex
-                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-                if (!jsonMatch) throw new Error("AI ei palauttanut validia JSON-muotoa.");
-                
-                const result = JSON.parse(jsonMatch[0]);
-                if (result.error) throw new Error("AI ei pystynyt analysoimaan kohdetta.");
-                
-                // Save to History
-                if (user && db) {
-                    addDoc(collection(db, 'artifacts', 'kitchen-ai-v1', 'users', user.uid, 'history'), {
-                        date: new Date().toISOString(),
-                        coach_feedback: result.coach_feedback,
-                        userNote: userText || ""
-                    }).catch(err => console.error("Historian tallennus epäonnistui:", err));
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts }] })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData?.error?.message || `API virhe: ${response.status}`);
                 }
-                
+
+                const data = await response.json();
+                const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!rawText) throw new Error("Ei vastausta AI:lta.");
+
+                // Puhdistetaan JSON tekstistä
+                const jsonMatch = rawText.match(/\{[\s\S]*?\}/g) || [];
+                const result = JSON.parse(jsonMatch.find(s => s.includes('coach_feedback')) || '{"coach_feedback":"Virhe tulkinnassa.","type":"unclear","items_detected":[],"health_score":5,"savings_tip":"Yritä uudelleen."}');
+
+                lastDetectedItems = result.items_detected || [];
                 renderAnalysis(result);
                 window.switchTab('analysis');
-                document.getElementById('userExplanation').value = "";
-                window.clearImage();
+                
+                if (user) {
+                    await addDoc(collection(db, 'artifacts', 'kitchen-ai-v1', 'users', user.uid, 'history'), {
+                        date: new Date().toISOString(),
+                        ...result,
+                        userNote: userText
+                    });
+                }
+
             } catch (e) {
-                console.error("Analyysi epäonnistui:", e);
-                alert(e.message || "Analyysi epäonnistui. Tarkista API-avain ja verkkoyhteys.");
+                console.error(e);
+                alert("Virhe analyysissa: " + e.message);
             } finally {
                 loader.classList.add('hidden');
-                document.getElementById('section-input').classList.remove('opacity-50', 'pointer-events-none');
             }
         };
 
-        // --- UI HELPERS ---
+        window.confirmInventory = async () => {
+            if (!user || lastDetectedItems.length === 0) return;
+            
+            const newPantry = { ...appState.pantry };
+            lastDetectedItems.forEach(item => {
+                const name = item.name.toLowerCase();
+                const key = `${name} (${item.unit})`; // Käytetään nimen ja yksikön yhdistelmää avaimena
+
+                if (item.action === 'add') {
+                    if (!newPantry[key]) {
+                        newPantry[key] = { amount: item.amount, unit: item.unit };
+                    } else {
+                        newPantry[key].amount += item.amount;
+                    }
+                } else if (item.action === 'remove' && newPantry[key]) {
+                    newPantry[key].amount = Math.max(0, newPantry[key].amount - item.amount);
+                }
+            });
+
+            await setDoc(doc(db, 'artifacts', 'kitchen-ai-v1', 'users', user.uid, 'data', 'pantry'), { items: newPantry });
+            document.getElementById('inventoryActions').classList.add('hidden');
+            window.switchTab('pantry');
+        };
+
+        window.suggestRecipes = async () => {
+            const apiKey = appState.profile.apiKey || localStorage.getItem('gemini_api_key');
+            if (!apiKey) return alert("API-avain puuttuu!");
+
+            const items = Object.entries(appState.pantry)
+                .filter(([_, v]) => v.amount > 0)
+                .map(([k, v]) => `${k}`);
+            
+            if (items.length === 0) return alert("Kaappi on tyhjä! Lisää ostoksia ensin.");
+
+            const loader = document.getElementById('loading');
+            document.getElementById('loadingText').innerText = "Keksitään reseptejä...";
+            loader.classList.remove('hidden');
+
+            try {
+                const prompt = `Minulla on kaapissa: ${items.join(", ")}. Keksi kaksi erilaista, nopeaa reseptiä. Vastaa JSON-muodossa: {"recipes": [{"name": "Ruokalaji", "desc": "Valmistusohje lyhyesti"}]}`;
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+
+                if (!response.ok) throw new Error("Reseptien haku epäonnistui.");
+
+                const data = await response.json();
+                const resJson = JSON.parse(data.candidates[0].content.parts[0].text.match(/\{[\s\S]*\}/)[0]);
+                const recipes = resJson.recipes || [];
+                
+                let html = `<h3 class="font-black text-white mb-4 italic uppercase">Kokeile näitä</h3>`;
+                recipes.forEach(r => {
+                    html += `<div class="bg-white/10 p-4 rounded-xl mb-2 text-xs"><b>${r.name}</b><br>${r.desc}</div>`;
+                });
+                document.getElementById('analysisResult').innerHTML += `<div class="analysis-card mt-4 p-6 rounded-[2rem] text-white">${html}</div>`;
+                window.switchTab('analysis');
+            } catch (e) { alert("Reseptit epäonnistuivat: " + e.message); } 
+            finally { 
+                loader.classList.add('hidden'); 
+                document.getElementById('loadingText').innerText = "Koutsi laskee algoritmeja...";
+            }
+        };
+
+        function renderPantry() {
+            const container = document.getElementById('pantryContainer');
+            const items = Object.entries(appState.pantry).filter(([_, v]) => v.amount > 0);
+            if (items.length === 0) {
+                container.innerHTML = `<p class="text-[10px] text-slate-400 italic">Kaappi on tyhjä. Skannaa kuitti!</p>`;
+                return;
+            }
+            container.innerHTML = items.map(([nameWithUnit, data]) => `
+                <div class="inventory-badge px-3 py-1 rounded-full text-[10px] font-bold uppercase">
+                    ${nameWithUnit.split('(')[0].trim()}: ${data.amount} ${data.unit}
+                </div>
+            `).join('');
+        }
+
+        function renderAnalysis(res) {
+            document.getElementById('analysisResult').innerHTML = `
+                <div class="analysis-card p-8 rounded-[2.5rem] text-white shadow-2xl animate-in">
+                    <div class="text-[10px] font-black tracking-widest opacity-60 mb-2 uppercase">Koutsin Palaute</div>
+                    <p class="text-emerald-50 text-base leading-relaxed italic mb-4">"${res.coach_feedback || 'Analyysi valmis.'}"</p>
+                    <div class="flex gap-4">
+                        <div class="bg-white/20 p-3 rounded-xl flex-1 text-center">
+                            <div class="text-[8px] uppercase font-black opacity-70">Health Score</div>
+                            <div class="text-xl font-black">${res.health_score || 0}/10</div>
+                        </div>
+                        <div class="bg-white/20 p-3 rounded-xl flex-1 text-center">
+                            <div class="text-[8px] uppercase font-black opacity-70">Säästövinkki</div>
+                            <div class="text-[10px] font-bold leading-tight">${res.savings_tip || 'Hyvältä näyttää!'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            if (res.items_detected?.length > 0) {
+                document.getElementById('inventoryActions').classList.remove('hidden');
+                document.getElementById('detectedItems').innerHTML = res.items_detected.map(i => `
+                    <span class="bg-white px-2 py-1 rounded-md text-[8px] font-black border border-emerald-200">
+                        ${i.action === 'add' ? 'Lisää' : 'Vähennä'}: ${i.name} (${i.amount} ${i.unit})
+                    </span>
+                `).join('');
+            } else {
+                document.getElementById('inventoryActions').classList.add('hidden');
+            }
+        }
 
         window.switchTab = (tab) => {
             document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active', 'opacity-100'));
-            document.getElementById(`section-${tab}`).classList.remove('hidden');
-            document.getElementById(`tab-${tab}`).classList.add('tab-active');
+            const target = document.getElementById(`section-${tab}`);
+            if (target) target.classList.remove('hidden');
+            const tabBtn = document.getElementById(`tab-${tab}`);
+            if (tabBtn) tabBtn.classList.add('tab-active');
+            
             if (tab === 'history') renderHistory();
+            if (tab === 'pantry') renderPantry();
         };
 
-        window.toggleProfile = () => {
-            const modal = document.getElementById('profileModal');
-            modal.classList.toggle('hidden');
-            if (!modal.classList.contains('hidden')) {
-                document.getElementById('profName').value = appState.profile.name;
-                document.getElementById('profGoal').value = appState.profile.goal;
-                // Haetaan avain dynaamisesti muistista tai tallennustilasta
-                document.getElementById('profApiKey').value = appState.profile.apiKey || localStorage.getItem('gemini_api_key') || "";
-            }
-        };
-
+        window.toggleProfile = () => document.getElementById('profileModal').classList.toggle('hidden');
+        
         window.clearImage = () => {
             selectedImageBase64 = null;
-            selectedMimeType = "image/jpeg"; // Palautetaan oletus
             document.getElementById('imageCount').innerText = "0";
             document.getElementById('imagePreviewContainer').classList.add('hidden');
             document.getElementById('imagePlaceholder').classList.remove('hidden');
@@ -381,43 +453,10 @@
             document.getElementById('imageInput').value = "";
         };
 
-        function updateUI() {
-            document.getElementById('welcomeText').innerText = `Moi ${appState.profile.name}!`;
-        }
-
-        function renderAnalysis(res) {
-            document.getElementById('analysisResult').innerHTML = `
-                <div class="analysis-card p-8 rounded-[2.5rem] text-white shadow-2xl animate-in">
-                    <h3 class="font-black text-xl italic uppercase mb-4">Koutsin vastaus</h3>
-                    <p class="text-emerald-50 text-base leading-relaxed italic">"${res.coach_feedback}"</p>
-                </div>
-            `;
-        }
-
-        function renderHistory() {
-            const container = document.getElementById('historyContainer');
-            if (appState.history.length === 0) {
-                container.innerHTML = `<p class="text-slate-400 text-xs py-10 italic uppercase">Ei vielä historiaa</p>`;
-                return;
-            }
-            container.innerHTML = appState.history.map(h => `
-                <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm text-left animate-in">
-                    <div class="flex justify-between items-center mb-2">
-                        <div class="text-[8px] text-slate-400 font-bold uppercase">${new Date(h.date).toLocaleDateString('fi-FI')}</div>
-                        <div class="text-[8px] bg-slate-100 px-2 py-0.5 rounded-full text-slate-500 font-bold uppercase">Analyysi</div>
-                    </div>
-                    <p class="text-[10px] text-slate-700 leading-tight">"${h.coach_feedback}"</p>
-                    ${h.userNote ? `<p class="mt-2 text-[8px] text-slate-400 italic font-medium">Oma huomio: ${h.userNote}</p>` : ''}
-                </div>
-            `).join('');
-        }
-
-        // Image selection handler
         document.getElementById('imageInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
             selectedMimeType = file.type || "image/jpeg";
-
             const reader = new FileReader();
             reader.onload = (ev) => {
                 selectedImageBase64 = ev.target.result;
@@ -429,6 +468,30 @@
             };
             reader.readAsDataURL(file);
         });
+
+        function updateUI() {
+            document.getElementById('welcomeText').innerText = `Moi ${appState.profile.name}!`;
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('historyContainer');
+            if (appState.history.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-400 italic">Ei vielä tapahtumia historiassa.</p>`;
+                return;
+            }
+            container.innerHTML = appState.history.map(h => `
+                <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm text-left animate-in mb-3">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="text-[8px] text-slate-400 font-bold uppercase">${new Date(h.date).toLocaleDateString('fi-FI')} klo ${new Date(h.date).toLocaleTimeString('fi-FI', {hour:'2-digit', minute:'2-digit'})}</div>
+                        <span class="text-[8px] font-black uppercase px-2 py-0.5 rounded ${h.type === 'shopping' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}">
+                            ${h.type === 'shopping' ? 'Osto' : 'Syönti'}
+                        </span>
+                    </div>
+                    <p class="text-[10px] text-slate-700 font-medium mb-2">"${h.coach_feedback || 'Analyysi valmis.'}"</p>
+                    <div class="text-[8px] text-slate-400 italic">Terveys: ${h.health_score}/10</div>
+                </div>
+            `).join('');
+        }
     </script>
 </body>
 </html>
